@@ -136,13 +136,16 @@ export async function handleExecuteQuery(input: ExecuteQueryInput): Promise<RawO
       content: result.stdout,
     };
   } catch (error) {
-    const connectionForError = resolvedConnectionString ?? input.connection_string;
+    // Use user-provided connection string for error details (before resolution)
+    // This ensures we sanitize what the user actually provided
+    const connectionForError = input.connection_string || resolvedConnectionString;
+    const queryForError = typeof input.query === "string" ? input.query.substring(0, 200) : undefined;
     const mcpError = formatMcpError(
       error,
-      connectionForError || input.query
+      connectionForError || queryForError
         ? {
-            connectionString: connectionForError,
-            query: input.query?.substring(0, 200),
+            connectionString: connectionForError ? sanitizeConnectionString(connectionForError) : undefined,
+            query: queryForError,
           }
         : undefined
     );
