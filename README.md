@@ -12,23 +12,22 @@ see on the command line.
 - `npm`
 - [`usql`](https://github.com/xo/usql) installed and available on `PATH`
 
-## Quick Launch with npm exec
+## Quick Launch with npx
 
-Once the package is published you will be able to run it directly via:
+Run the server directly via npx:
 
 ```bash
 npx usql-mcp
 ```
 
-Until it is published, you can still spin it up straight from the repository using npm’s Git support (the
-`prepare` script compiles the TypeScript automatically):
+This downloads the package and executes the CLI entry point, which runs the MCP server on stdio.
+
+You can also run it directly from the repository using npm's Git support (the `prepare` script compiles
+the TypeScript automatically):
 
 ```bash
 npx github:jvm/usql-mcp
 ```
-
-Both commands download the package, build `dist/`, and execute the CLI entry point (`usql-mcp`), which
-runs the MCP server on stdio.
 
 ## Getting Started
 
@@ -87,29 +86,13 @@ Add the following configuration to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "usql": {
-      "command": "node",
-      "args": ["/absolute/path/to/usql-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["usql-mcp"],
       "env": {
         "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
         "USQL_SQLITE": "sqlite:///path/to/database.db",
         "USQL_DEFAULT_CONNECTION": "postgres",
         "USQL_QUERY_TIMEOUT_MS": "30000"
-      }
-    }
-  }
-}
-```
-
-**Using npx** (once published):
-
-```json
-{
-  "mcpServers": {
-    "usql": {
-      "command": "npx",
-      "args": ["usql-mcp"],
-      "env": {
-        "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb"
       }
     }
   }
@@ -130,27 +113,11 @@ Add the MCP server to your Claude Code configuration:
 {
   "mcpServers": {
     "usql": {
-      "command": "node",
-      "args": ["/absolute/path/to/usql-mcp/dist/index.js"],
-      "env": {
-        "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
-        "USQL_DEFAULT_CONNECTION": "postgres"
-      }
-    }
-  }
-}
-```
-
-**Using npx**:
-
-```json
-{
-  "mcpServers": {
-    "usql": {
       "command": "npx",
       "args": ["-y", "usql-mcp"],
       "env": {
-        "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb"
+        "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
+        "USQL_DEFAULT_CONNECTION": "postgres"
       }
     }
   }
@@ -168,8 +135,8 @@ Codex CLI configuration varies by implementation, but typically uses a similar J
   "mcp": {
     "servers": {
       "usql": {
-        "command": "node",
-        "args": ["/absolute/path/to/usql-mcp/dist/index.js"],
+        "command": "npx",
+        "args": ["-y", "usql-mcp"],
         "env": {
           "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
           "USQL_MYSQL": "mysql://user:password@localhost:3306/mydb"
@@ -196,28 +163,12 @@ GitHub Copilot in VS Code can use MCP servers through the Copilot Chat extension
 {
   "github.copilot.chat.mcp.servers": {
     "usql": {
-      "command": "node",
-      "args": ["/absolute/path/to/usql-mcp/dist/index.js"],
+      "command": "npx",
+      "args": ["-y", "usql-mcp"],
       "env": {
         "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
         "USQL_SQLITE": "sqlite:///absolute/path/to/database.db",
         "USQL_DEFAULT_CONNECTION": "postgres"
-      }
-    }
-  }
-}
-```
-
-**Using npx**:
-
-```json
-{
-  "github.copilot.chat.mcp.servers": {
-    "usql": {
-      "command": "npx",
-      "args": ["-y", "usql-mcp"],
-      "env": {
-        "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb"
       }
     }
   }
@@ -248,8 +199,8 @@ Then use a simpler client configuration:
 {
   "mcpServers": {
     "usql": {
-      "command": "node",
-      "args": ["/absolute/path/to/usql-mcp/dist/index.js"]
+      "command": "npx",
+      "args": ["-y", "usql-mcp"]
     }
   }
 }
