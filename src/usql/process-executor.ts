@@ -28,6 +28,7 @@ export async function executeUsqlCommand(
     connectionString: formatConnectionStringForLogging(connectionString),
     timeout,
     format,
+    binaryPath: process.env.USQL_BINARY_PATH?.trim() || "usql",
   });
 
   return new Promise((resolve, reject) => {
@@ -53,6 +54,9 @@ export async function executeUsqlCommand(
     // Build usql arguments
     const args = [connectionString, "-c", command];
 
+    const configuredCommand = process.env.USQL_BINARY_PATH?.trim();
+    const commandToRun = configuredCommand && configuredCommand.length > 0 ? configuredCommand : "usql";
+
     // Add format flag
     if (format === "json") {
       args.push("--json");
@@ -61,13 +65,14 @@ export async function executeUsqlCommand(
     }
 
     // Use detached process group for better cleanup
-    const childProcess = spawn("usql", args, {
+    const childProcess = spawn(commandToRun, args, {
       detached: true,
       stdio: ["pipe", "pipe", "pipe"],
     });
 
     logger.debug("[process-executor] Spawned usql process", {
       pid: childProcess.pid,
+      command: commandToRun,
       args: args.map((arg, i) => (i === 0 ? formatConnectionStringForLogging(arg) : arg)),
     });
 

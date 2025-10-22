@@ -61,6 +61,7 @@ export function loadConfig(): UsqlConfig {
       key !== "USQL_CONFIG_PATH" &&
       key !== "USQL_QUERY_TIMEOUT_MS" &&
       key !== "USQL_DEFAULT_CONNECTION" &&
+      key !== "USQL_BINARY_PATH" &&
       value
     ) {
       const connectionName = key.substring(5).toLowerCase();
