@@ -14,7 +14,7 @@
     "AGENTS.md"
   ],
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=18.18.0"
   },
   "scripts": {
     "build": "tsc",
