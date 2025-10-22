@@ -14,8 +14,14 @@ describe("Process Executor", () => {
   let mockStdout: EventEmitter;
   let mockStderr: EventEmitter;
   let mockStdin: any;
+  let mockProcessKill: jest.SpyInstance;
 
   beforeEach(() => {
+    jest.useFakeTimers();
+
+    // Mock process.kill to avoid ESRCH errors with fake timers
+    mockProcessKill = jest.spyOn(process, 'kill').mockImplementation(() => true);
+
     mockStdout = new EventEmitter();
     mockStderr = new EventEmitter();
     mockStdin = {
@@ -34,6 +40,8 @@ describe("Process Executor", () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+    jest.useRealTimers();
+    mockProcessKill.mockRestore();
   });
 
   describe("executeUsqlCommand", () => {
@@ -100,9 +108,11 @@ describe("Process Executor", () => {
         { timeout: 100 }
       );
 
-      // Don't emit any events - let it timeout
+      // Advance timers to trigger timeout
+      jest.advanceTimersByTime(101);
+
       await expect(promise).rejects.toThrow(/timed out after 100ms/);
-      expect(mockChildProcess.kill).toHaveBeenCalledWith(-12345);
+      expect(mockProcessKill).toHaveBeenCalledWith(-12345);
     });
 
     it("handles process error events", async () => {
@@ -121,8 +131,8 @@ describe("Process Executor", () => {
         { timeout: 50 }
       );
 
-      // Wait for timeout to trigger
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      // Advance timers to trigger timeout
+      jest.advanceTimersByTime(51);
 
       // Now emit error - should be ignored
       mockChildProcess.emit("error", new Error("Should be ignored"));
@@ -270,6 +280,8 @@ describe("Process Executor", () => {
         timeout: 50,
       });
 
+      jest.advanceTimersByTime(51);
+
       await expect(promise).rejects.toThrow(/timeout/);
     });
   });
@@ -299,7 +311,9 @@ describe("Process Executor", () => {
         timeout: 100,
       });
 
-      // Let it timeout
+      // Advance timers to trigger timeout
+      jest.advanceTimersByTime(101);
+
       await expect(promise).rejects.toThrow(/timed out after 100ms/);
     });
 
