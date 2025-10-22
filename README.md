@@ -51,6 +51,7 @@ connections are:
 - `USQL_CONFIG_PATH`
 - `USQL_QUERY_TIMEOUT_MS`
 - `USQL_DEFAULT_CONNECTION`
+- `USQL_BINARY_PATH`
 
 Examples:
 
@@ -67,6 +68,10 @@ override it when you need a guard. Individual tool calls can pass `timeout_ms` t
 `null` for unlimited on that call). Set `USQL_DEFAULT_CONNECTION` (or `defaults.defaultConnection` in
 `config.json`) to name the connection that should be used automatically when a tool call omits the
 `connection_string` field.
+
+If `usql` is not on your `PATH`, set `USQL_BINARY_PATH` to the absolute path of the executable (for
+example, `/usr/local/bin/usql`). When unset, the MCP server assumes `usql` is discoverable via the
+environment `PATH`.
 
 ## Client Configuration
 

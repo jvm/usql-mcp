@@ -22,6 +22,8 @@ describe("Process Executor", () => {
     // Mock process.kill to avoid ESRCH errors with fake timers
     mockProcessKill = jest.spyOn(process, 'kill').mockImplementation(() => true);
 
+    delete process.env.USQL_BINARY_PATH;
+
     mockStdout = new EventEmitter();
     mockStderr = new EventEmitter();
     mockStdin = {
@@ -42,6 +44,7 @@ describe("Process Executor", () => {
     jest.clearAllMocks();
     jest.useRealTimers();
     mockProcessKill.mockRestore();
+    delete process.env.USQL_BINARY_PATH;
   });
 
   describe("executeUsqlCommand", () => {
@@ -193,6 +196,22 @@ describe("Process Executor", () => {
       const result = await promise;
 
       expect(result.stderr).toBe("ERROR: syntax error");
+    });
+
+    it("uses custom usql binary path when configured", async () => {
+      process.env.USQL_BINARY_PATH = " /opt/usql/bin/usql ";
+
+      const promise = executeUsqlCommand("postgres://localhost/db", "SELECT 1");
+
+      mockChildProcess.emit("close", 0);
+
+      await promise;
+
+      expect(spawn).toHaveBeenCalledWith(
+        "/opt/usql/bin/usql",
+        expect.any(Array),
+        expect.any(Object)
+      );
     });
 
     it("defaults to JSON format when format not specified", async () => {
