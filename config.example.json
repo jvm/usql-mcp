@@ -1,0 +1,21 @@
+{
+  "connections": {
+    "postgres_local": {
+      "uri": "postgres://user:password@localhost:5432/mydb",
+      "description": "Local PostgreSQL database"
+    },
+    "mysql_local": {
+      "uri": "mysql://root:password@localhost:3306/mydb",
+      "description": "Local MySQL database"
+    },
+    "sqlite_test": {
+      "uri": "sqlite:///./test.db",
+      "description": "SQLite test database"
+    }
+  },
+  "defaults": {
+    "queryTimeout": null,
+    "maxResultRows": 10000,
+    "defaultConnection": "postgres_local"
+  }
+}
