@@ -12,23 +12,22 @@ see on the command line.
 - `npm`
 - [`usql`](https://github.com/xo/usql) installed and available on `PATH`
 
-## Quick Launch with npm exec
+## Quick Launch with npx
 
-Once the package is published you will be able to run it directly via:
+Run the server directly via npx:
 
 ```bash
 npx usql-mcp
 ```
 
-Until it is published, you can still spin it up straight from the repository using npm’s Git support (the
-`prepare` script compiles the TypeScript automatically):
+This downloads the package and executes the CLI entry point, which runs the MCP server on stdio.
+
+You can also run it directly from the repository using npm's Git support (the `prepare` script compiles
+the TypeScript automatically):
 
 ```bash
 npx github:jvm/usql-mcp
 ```
-
-Both commands download the package, build `dist/`, and execute the CLI entry point (`usql-mcp`), which
-runs the MCP server on stdio.
 
 ## Getting Started
 
@@ -69,18 +68,151 @@ override it when you need a guard. Individual tool calls can pass `timeout_ms` t
 `config.json`) to name the connection that should be used automatically when a tool call omits the
 `connection_string` field.
 
-For Claude Desktop, point the MCP configuration to the compiled entry point:
+## Client Configuration
+
+This section explains how to configure the usql-mcp server in different MCP clients.
+
+### Claude Desktop
+
+Claude Desktop uses a configuration file to register MCP servers. The location depends on your operating system:
+
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+- **Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Add the following configuration to your `claude_desktop_config.json`:
 
 ```json
 {
   "mcpServers": {
     "usql": {
-      "command": "node",
-      "args": ["/absolute/path/to/usql-mcp/dist/index.js"]
+      "command": "npx",
+      "args": ["usql-mcp"],
+      "env": {
+        "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
+        "USQL_SQLITE": "sqlite:///path/to/database.db",
+        "USQL_DEFAULT_CONNECTION": "postgres",
+        "USQL_QUERY_TIMEOUT_MS": "30000"
+      }
     }
   }
 }
 ```
+
+After editing the configuration file, restart Claude Desktop for changes to take effect.
+
+### Claude Code
+
+Claude Code (CLI) supports MCP servers through its configuration file located at:
+
+- **All platforms**: `~/.clauderc` or `~/.config/claude/config.json`
+
+Add the MCP server to your Claude Code configuration:
+
+```json
+{
+  "mcpServers": {
+    "usql": {
+      "command": "npx",
+      "args": ["-y", "usql-mcp"],
+      "env": {
+        "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
+        "USQL_DEFAULT_CONNECTION": "postgres"
+      }
+    }
+  }
+}
+```
+
+The server will be available in your Claude Code sessions automatically.
+
+### Codex CLI
+
+Codex CLI configuration varies by implementation, but typically uses a similar JSON configuration approach. Create or edit your Codex configuration file (usually `~/.codexrc` or as specified in your Codex documentation):
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "usql": {
+        "command": "npx",
+        "args": ["-y", "usql-mcp"],
+        "env": {
+          "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
+          "USQL_MYSQL": "mysql://user:password@localhost:3306/mydb"
+        }
+      }
+    }
+  }
+}
+```
+
+Refer to your specific Codex CLI documentation for the exact configuration file location and format.
+
+### GitHub Copilot (VS Code)
+
+GitHub Copilot in VS Code can use MCP servers through the Copilot Chat extension settings. Configuration is done through VS Code's `settings.json`:
+
+1. Open VS Code Settings (JSON) via:
+   - **macOS**: `Cmd + Shift + P` → "Preferences: Open User Settings (JSON)"
+   - **Windows/Linux**: `Ctrl + Shift + P` → "Preferences: Open User Settings (JSON)"
+
+2. Add the MCP server configuration:
+
+```json
+{
+  "github.copilot.chat.mcp.servers": {
+    "usql": {
+      "command": "npx",
+      "args": ["-y", "usql-mcp"],
+      "env": {
+        "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
+        "USQL_SQLITE": "sqlite:///absolute/path/to/database.db",
+        "USQL_DEFAULT_CONNECTION": "postgres"
+      }
+    }
+  }
+}
+```
+
+After saving the settings, reload VS Code or restart the Copilot extension for changes to take effect.
+
+### Environment Variables vs. Configuration
+
+For all clients, you can choose between:
+
+1. **Inline environment variables** (shown above) - Connection strings in the config file
+2. **System environment variables** - Set `USQL_*` variables in your shell profile
+
+**System environment approach**:
+
+```bash
+# In ~/.bashrc, ~/.zshrc, or equivalent
+export USQL_POSTGRES="postgres://user:password@localhost:5432/mydb"
+export USQL_SQLITE="sqlite:///path/to/database.db"
+export USQL_DEFAULT_CONNECTION="postgres"
+```
+
+Then use a simpler client configuration:
+
+```json
+{
+  "mcpServers": {
+    "usql": {
+      "command": "npx",
+      "args": ["-y", "usql-mcp"]
+    }
+  }
+}
+```
+
+### Security Best Practices
+
+- **Avoid hardcoding credentials**: Use environment variables or secure credential stores
+- **File permissions**: Ensure configuration files with credentials are not world-readable (chmod 600)
+- **Read-only access**: Create database users with minimal required permissions for AI queries
+- **Network security**: Use SSL/TLS connections for remote databases
+- **Audit logging**: Enable database audit logs to track AI-generated queries
 
 ## Tool Catalogue
 
