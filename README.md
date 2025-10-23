@@ -1,5 +1,7 @@
 # USQL MCP Server
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 `usql-mcp` bridges the [Model Context Protocol](https://modelcontextprotocol.io/) with the
 [usql](https://github.com/xo/usql) CLI so assistants and other MCP clients can run queries against any
 database usql supports. The server forwards tool requests directly to `usql` and streams the raw CLI
@@ -32,7 +34,7 @@ npx github:jvm/usql-mcp
 ## Getting Started
 
 ```bash
-git clone https://github.com/yourusername/usql-mcp.git
+git clone https://github.com/jvm/usql-mcp.git
 cd usql-mcp
 npm install
 npm run build
@@ -92,12 +94,11 @@ Add the following configuration to your `claude_desktop_config.json`:
   "mcpServers": {
     "usql": {
       "command": "npx",
-      "args": ["usql-mcp"],
+      "args": ["-y", "usql-mcp"],
       "env": {
+        "USQL_DEFAULT_CONNECTION": "oracle://user:secret@host:1521/service",
         "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
-        "USQL_SQLITE": "sqlite:///path/to/database.db",
-        "USQL_DEFAULT_CONNECTION": "postgres",
-        "USQL_QUERY_TIMEOUT_MS": "30000"
+        "USQL_SQLITE": "sqlite:///path/to/database.db"
       }
     }
   }
@@ -121,8 +122,9 @@ Add the MCP server to your Claude Code configuration:
       "command": "npx",
       "args": ["-y", "usql-mcp"],
       "env": {
+        "USQL_DEFAULT_CONNECTION": "oracle://user:secret@host:1521/service",
         "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
-        "USQL_DEFAULT_CONNECTION": "postgres"
+        "USQL_SQLITE": "sqlite:///path/to/database.db"
       }
     }
   }
@@ -143,8 +145,9 @@ Codex CLI configuration varies by implementation, but typically uses a similar J
         "command": "npx",
         "args": ["-y", "usql-mcp"],
         "env": {
+          "USQL_DEFAULT_CONNECTION": "oracle://user:secret@host:1521/service",
           "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
-          "USQL_MYSQL": "mysql://user:password@localhost:3306/mydb"
+          "USQL_SQLITE": "sqlite:///path/to/database.db"
         }
       }
     }
@@ -171,9 +174,9 @@ GitHub Copilot in VS Code can use MCP servers through the Copilot Chat extension
       "command": "npx",
       "args": ["-y", "usql-mcp"],
       "env": {
+        "USQL_DEFAULT_CONNECTION": "oracle://user:secret@host:1521/service",
         "USQL_POSTGRES": "postgres://user:password@localhost:5432/mydb",
-        "USQL_SQLITE": "sqlite:///absolute/path/to/database.db",
-        "USQL_DEFAULT_CONNECTION": "postgres"
+        "USQL_SQLITE": "sqlite:///path/to/database.db"
       }
     }
   }
@@ -193,9 +196,9 @@ For all clients, you can choose between:
 
 ```bash
 # In ~/.bashrc, ~/.zshrc, or equivalent
+export USQL_DEFAULT_CONNECTION="oracle://user:secret@host:1521/service"
 export USQL_POSTGRES="postgres://user:password@localhost:5432/mydb"
 export USQL_SQLITE="sqlite:///path/to/database.db"
-export USQL_DEFAULT_CONNECTION="postgres"
 ```
 
 Then use a simpler client configuration:
@@ -221,20 +224,20 @@ Then use a simpler client configuration:
 
 ## Tool Catalogue
 
-| Tool | Purpose | Notable Inputs |
-| --- | --- | --- |
-| `execute_query` | Run an arbitrary SQL statement | `connection_string`, `query`, optional `output_format` (`json`\|`csv`), `timeout_ms` |
-| `execute_script` | Execute a multi-statement script | `connection_string`, `script`, optional `output_format`, `timeout_ms` |
-| `list_databases` | List databases available on the server | `connection_string`, optional `output_format`, `timeout_ms` |
-| `list_tables` | List tables in the current database | `connection_string`, optional `output_format`, `timeout_ms` |
-| `describe_table` | Inspect table metadata via `\d` | `connection_string`, `table`, optional `output_format`, `timeout_ms` |
+| Tool             | Purpose                                | Notable Inputs                                                                       |
+| ---------------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
+| `execute_query`  | Run an arbitrary SQL statement         | `connection_string`, `query`, optional `output_format` (`json`\|`csv`), `timeout_ms` |
+| `execute_script` | Execute a multi-statement script       | `connection_string`, `script`, optional `output_format`, `timeout_ms`                |
+| `list_databases` | List databases available on the server | `connection_string`, optional `output_format`, `timeout_ms`                          |
+| `list_tables`    | List tables in the current database    | `connection_string`, optional `output_format`, `timeout_ms`                          |
+| `describe_table` | Inspect table metadata via `\d`        | `connection_string`, `table`, optional `output_format`, `timeout_ms`                 |
 
 Successful calls return the exact stdout produced by `usql`, paired with the format indicator:
 
 ```jsonc
 {
   "format": "json", // or "csv"
-  "content": "[{\"id\":1}]"
+  "content": "[{\"id\":1}]",
 }
 ```
 
@@ -253,5 +256,5 @@ Debug logging follows the namespace in `DEBUG=usql-mcp:*`.
 
 ## Contributing
 
-See `AGENTS.md` for contributor guidelines. Open an issue before large changes so we can keep the tooling
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for contributor guidelines and [`AGENTS.md`](./AGENTS.md) for coding agents guidelines. Open an issue before large changes so we can keep the tooling
 lean and aligned with the MCP ecosystem.
