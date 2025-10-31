@@ -85,6 +85,8 @@ class UsqlMcpServer {
 
     // Tool call handler
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const requestStartTime = Date.now();
+
       logger.debug("[server] Tool call", {
         tool: request.params.name,
       });
@@ -92,34 +94,53 @@ class UsqlMcpServer {
       try {
         const result = await this.executeTool(request.params.name, request.params.arguments);
 
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(result, null, 2),
-            },
-          ],
+        const requestEndTime = Date.now();
+        const elapsedMs = requestEndTime - requestStartTime;
+
+        // Add elapsed_ms to the result
+        const resultWithTiming = {
+          ...(typeof result === "object" && result !== null ? result : {}),
+          elapsed_ms: elapsedMs,
         };
-      } catch (error) {
-        const mcpError = formatMcpError(error);
-        logger.error("[server] Tool execution error", error);
+
+        logger.debug("[server] Tool execution completed", {
+          tool: request.params.name,
+          elapsedMs,
+        });
 
         return {
           content: [
             {
               type: "text",
-              text: `${mcpError.error}: ${mcpError.message}`,
+              text: JSON.stringify(resultWithTiming, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        const requestEndTime = Date.now();
+        const elapsedMs = requestEndTime - requestStartTime;
+
+        const mcpError = formatMcpError(error);
+        logger.error("[server] Tool execution error", {
+          error,
+          elapsedMs,
+        });
+
+        // Add elapsed_ms to error response
+        const errorResponse = {
+          error: mcpError.error,
+          message: mcpError.message,
+          ...(mcpError.details ? { details: mcpError.details } : {}),
+          elapsed_ms: elapsedMs,
+        };
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(errorResponse, null, 2),
               isError: true,
             },
-            ...(mcpError.details
-              ? [
-                  {
-                    type: "text",
-                    text: JSON.stringify(mcpError.details, null, 2),
-                    isError: true,
-                  },
-                ]
-              : []),
           ],
         };
       }
