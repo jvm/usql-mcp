@@ -23,6 +23,8 @@ export function loadConfig(): UsqlConfig {
       queryTimeout: undefined,
       maxResultRows: 10000,
       defaultConnection: undefined,
+      backgroundThresholdMs: 30000, // 30 seconds default
+      jobResultTtlMs: 3600000, // 1 hour default
     },
   };
 
@@ -62,6 +64,8 @@ export function loadConfig(): UsqlConfig {
       key !== "USQL_QUERY_TIMEOUT_MS" &&
       key !== "USQL_DEFAULT_CONNECTION" &&
       key !== "USQL_BINARY_PATH" &&
+      key !== "USQL_BACKGROUND_THRESHOLD_MS" &&
+      key !== "USQL_JOB_RESULT_TTL_MS" &&
       value
     ) {
       const connectionName = key.substring(5).toLowerCase();
@@ -87,6 +91,22 @@ export function loadConfig(): UsqlConfig {
     if (config.defaults) {
       config.defaults.defaultConnection = defaultConnection;
       logger.debug("[config] Set default connection from env var", { defaultConnection });
+    }
+  }
+
+  if (process.env.USQL_BACKGROUND_THRESHOLD_MS) {
+    const threshold = parseInt(process.env.USQL_BACKGROUND_THRESHOLD_MS, 10);
+    if (!isNaN(threshold) && config.defaults) {
+      config.defaults.backgroundThresholdMs = threshold;
+      logger.debug("[config] Set background threshold from env var", { threshold });
+    }
+  }
+
+  if (process.env.USQL_JOB_RESULT_TTL_MS) {
+    const ttl = parseInt(process.env.USQL_JOB_RESULT_TTL_MS, 10);
+    if (!isNaN(ttl) && config.defaults) {
+      config.defaults.jobResultTtlMs = ttl;
+      logger.debug("[config] Set job result TTL from env var", { ttl });
     }
   }
 
@@ -133,6 +153,16 @@ export function getDefaultConnectionName(): string | undefined {
   return config.defaults?.defaultConnection;
 }
 
+export function getBackgroundThresholdMs(): number {
+  const config = loadConfig();
+  return config.defaults?.backgroundThresholdMs ?? 30000;
+}
+
+export function getJobResultTtlMs(): number {
+  const config = loadConfig();
+  return config.defaults?.jobResultTtlMs ?? 3600000;
+}
+
 export function resolveConnectionStringOrDefault(nameOrUri?: string): string {
   if (nameOrUri && typeof nameOrUri === "string" && nameOrUri.trim().length > 0) {
     return resolveConnectionString(nameOrUri);
@@ -140,8 +170,14 @@ export function resolveConnectionStringOrDefault(nameOrUri?: string): string {
 
   const defaultConnection = getDefaultConnectionName();
   if (!defaultConnection) {
+    const availableConnections = Object.keys(loadConfig().connections);
+    const availableStr = availableConnections.length > 0
+      ? `Available connections: ${availableConnections.join(", ")}. `
+      : "No named connections are configured. ";
     throw new Error(
-      "No connection string provided and no default connection configured. Set USQL_DEFAULT_CONNECTION or defaults.defaultConnection."
+      `No connection string provided and no default connection configured. ${availableStr}` +
+      `Set USQL_DEFAULT_CONNECTION environment variable or provide a connection_string parameter to the tool. ` +
+      `Use get_server_info to see available options.`
     );
   }
 

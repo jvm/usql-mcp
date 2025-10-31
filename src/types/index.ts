@@ -54,6 +54,8 @@ export interface UsqlConfig {
     queryTimeout?: number;
     maxResultRows?: number;
     defaultConnection?: string;
+    backgroundThresholdMs?: number;
+    jobResultTtlMs?: number;
   };
 }
 
@@ -66,4 +68,20 @@ export interface McpError {
   error: string;
   message: string;
   details?: Record<string, unknown>;
+}
+
+export interface JobStatusResponse {
+  status: "running" | "completed" | "failed" | "cancelled";
+  job_id: string;
+  started_at: string;
+  elapsed_ms: number;
+  result?: unknown;
+  error?: McpError;
+}
+
+export interface BackgroundJobResponse {
+  status: "background";
+  job_id: string;
+  message: string;
+  started_at: string;
 }

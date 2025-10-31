@@ -2,7 +2,7 @@
  * Spawn and manage usql subprocesses
  */
 
-import { spawn } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import { createLogger } from "../utils/logger.js";
 import { createUsqlError } from "../utils/error-handler.js";
 import { formatConnectionStringForLogging } from "./connection.js";
@@ -16,13 +16,19 @@ export interface UsqlExecutionResult {
   exitCode: number;
 }
 
+export interface UsqlProcessHandle {
+  process: ChildProcess;
+  promise: Promise<UsqlExecutionResult>;
+}
+
 export async function executeUsqlCommand(
   connectionString: string,
   command: string,
-  options?: UsqlExecutorOptions
+  options?: UsqlExecutorOptions & { signal?: AbortSignal }
 ): Promise<UsqlExecutionResult> {
   const timeout = options?.timeout;
   const format = options?.format || "json";
+  const signal = options?.signal;
 
   logger.debug("[process-executor] Executing usql command", {
     connectionString: formatConnectionStringForLogging(connectionString),
@@ -35,12 +41,21 @@ export async function executeUsqlCommand(
     let stdout = "";
     let stderr = "";
     let timedOut = false;
+    let aborted = false;
     let timeoutHandle: NodeJS.Timeout | null = null;
+    let childProcess: ChildProcess | null = null;
 
     if (typeof timeout === "number" && timeout > 0) {
       timeoutHandle = setTimeout(() => {
         timedOut = true;
-        process.kill(-childProcess.pid!); // Kill process group
+        if (childProcess?.pid) {
+          logger.debug("[process-executor] Query timeout, killing process", { pid: childProcess.pid });
+          try {
+            process.kill(-childProcess.pid);
+          } catch (e) {
+            logger.warn("[process-executor] Failed to kill process", { error: e });
+          }
+        }
         reject(
           createUsqlError(
             "QueryTimeout",
@@ -49,6 +64,29 @@ export async function executeUsqlCommand(
           )
         );
       }, timeout);
+    }
+
+    // Handle abort signal
+    if (signal) {
+      if (signal.aborted) {
+        reject(new Error("Operation aborted"));
+        return;
+      }
+
+      const abortHandler = () => {
+        aborted = true;
+        logger.debug("[process-executor] Abort signal received, killing process", { pid: childProcess?.pid });
+        if (childProcess?.pid) {
+          try {
+            process.kill(-childProcess.pid);
+          } catch (e) {
+            logger.warn("[process-executor] Failed to kill process on abort", { error: e });
+          }
+        }
+        reject(new Error("Operation aborted by client"));
+      };
+
+      signal.addEventListener("abort", abortHandler);
     }
 
     // Build usql arguments
@@ -65,7 +103,7 @@ export async function executeUsqlCommand(
     }
 
     // Use detached process group for better cleanup
-    const childProcess = spawn(commandToRun, args, {
+    childProcess = spawn(commandToRun, args, {
       detached: true,
       stdio: ["pipe", "pipe", "pipe"],
     });
@@ -76,11 +114,11 @@ export async function executeUsqlCommand(
       args: args.map((arg, i) => (i === 0 ? formatConnectionStringForLogging(arg) : arg)),
     });
 
-    childProcess.stdout.on("data", (data) => {
+    childProcess.stdout?.on("data", (data) => {
       stdout += data.toString();
     });
 
-    childProcess.stderr.on("data", (data) => {
+    childProcess.stderr?.on("data", (data) => {
       stderr += data.toString();
     });
 
@@ -88,7 +126,7 @@ export async function executeUsqlCommand(
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
       }
-      if (!timedOut) {
+      if (!timedOut && !aborted) {
         logger.error("[process-executor] Process error", error);
         reject(error);
       }
@@ -99,7 +137,7 @@ export async function executeUsqlCommand(
         clearTimeout(timeoutHandle);
       }
 
-      if (timedOut) {
+      if (timedOut || aborted) {
         return; // Already rejected
       }
 
@@ -116,7 +154,7 @@ export async function executeUsqlCommand(
       });
     });
 
-    childProcess.stdin.end();
+    childProcess.stdin?.end();
   });
 }
 

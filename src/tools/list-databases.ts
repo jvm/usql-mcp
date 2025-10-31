@@ -10,19 +10,20 @@ import { validateConnectionString } from "../usql/connection.js";
 import { executeUsqlQuery } from "../usql/process-executor.js";
 import { parseUsqlError } from "../usql/parser.js";
 import { getQueryTimeout, resolveConnectionStringOrDefault } from "../usql/config.js";
+import { withBackgroundSupport } from "./background-wrapper.js";
 
 const logger = createLogger("usql-mcp:tools:list-databases");
 
 export const listDatabasesSchema: Tool = {
   name: "list_databases",
-  description: "List all databases available on a database server",
+  description: "List all databases available on a database server. Uses default connection if none specified.",
   inputSchema: {
     type: "object",
     properties: {
       connection_string: {
         type: "string",
         description:
-          'Database connection URL or configured connection name (e.g., "oracle" for USQL_ORACLE env var, or full URL like "postgres://localhost")',
+          '(Optional) Database connection URL or configured connection name. If omitted, uses the default connection from USQL_DEFAULT_CONNECTION. Examples: "oracle" for USQL_ORACLE env var, or full URL like "postgres://localhost". Use get_server_info to discover available connections.',
       },
       output_format: {
         type: "string",
@@ -40,7 +41,7 @@ export const listDatabasesSchema: Tool = {
 };
 
 
-export async function handleListDatabases(input: ListDatabasesInput): Promise<RawOutput> {
+async function _handleListDatabases(input: ListDatabasesInput): Promise<RawOutput> {
   const outputFormat = input.output_format || "json";
 
   logger.debug("[list-databases] Handling request", {
@@ -109,3 +110,5 @@ export async function handleListDatabases(input: ListDatabasesInput): Promise<Ra
     throw mcpError;
   }
 }
+
+export const handleListDatabases = withBackgroundSupport("list_databases", _handleListDatabases);

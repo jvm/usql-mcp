@@ -10,18 +10,19 @@ import { validateConnectionString } from "../usql/connection.js";
 import { executeUsqlQuery } from "../usql/process-executor.js";
 import { parseUsqlError } from "../usql/parser.js";
 import { getQueryTimeout, resolveConnectionStringOrDefault } from "../usql/config.js";
+import { withBackgroundSupport } from "./background-wrapper.js";
 
 const logger = createLogger("usql-mcp:tools:list-tables");
 
 export const listTablesSchema: Tool = {
   name: "list_tables",
-  description: "List all tables in a database",
+  description: "List all tables in a database. Uses default connection if none specified.",
   inputSchema: {
     type: "object",
     properties: {
       connection_string: {
         type: "string",
-        description: 'Database connection URL or configured connection name (e.g., "oracle" for USQL_ORACLE)',
+        description: '(Optional) Database connection URL or configured connection name. If omitted, uses the default connection from USQL_DEFAULT_CONNECTION (e.g., "oracle" for USQL_ORACLE). Use get_server_info to discover available connections.',
       },
       database: {
         type: "string",
@@ -42,7 +43,7 @@ export const listTablesSchema: Tool = {
   },
 };
 
-export async function handleListTables(input: ListTablesInput): Promise<RawOutput> {
+async function _handleListTables(input: ListTablesInput): Promise<RawOutput> {
   const outputFormat = input.output_format || "json";
 
   logger.debug("[list-tables] Handling request", {
@@ -129,3 +130,5 @@ export async function handleListTables(input: ListTablesInput): Promise<RawOutpu
     throw mcpError;
   }
 }
+
+export const handleListTables = withBackgroundSupport("list_tables", _handleListTables);

@@ -10,18 +10,19 @@ import { validateConnectionString } from "../usql/connection.js";
 import { executeUsqlQuery } from "../usql/process-executor.js";
 import { parseUsqlError } from "../usql/parser.js";
 import { getQueryTimeout, resolveConnectionStringOrDefault } from "../usql/config.js";
+import { withBackgroundSupport } from "./background-wrapper.js";
 
 const logger = createLogger("usql-mcp:tools:describe-table");
 
 export const describeTableSchema: Tool = {
   name: "describe_table",
-  description: "Get detailed schema information for a specific table (columns, types, constraints)",
+  description: "Get detailed schema information for a specific table (columns, types, constraints). Uses default connection if none specified.",
   inputSchema: {
     type: "object",
     properties: {
       connection_string: {
         type: "string",
-        description: 'Database connection URL or configured connection name (e.g., "oracle" for USQL_ORACLE)',
+        description: '(Optional) Database connection URL or configured connection name. If omitted, uses the default connection from USQL_DEFAULT_CONNECTION (e.g., "oracle" for USQL_ORACLE). Use get_server_info to discover available connections.',
       },
       table: {
         type: "string",
@@ -46,7 +47,7 @@ export const describeTableSchema: Tool = {
   },
 };
 
-export async function handleDescribeTable(input: DescribeTableInput): Promise<RawOutput> {
+async function _handleDescribeTable(input: DescribeTableInput): Promise<RawOutput> {
   const outputFormat = input.output_format || "json";
 
   logger.debug("[describe-table] Handling request", {
@@ -159,3 +160,5 @@ export async function handleDescribeTable(input: DescribeTableInput): Promise<Ra
     throw mcpError;
   }
 }
+
+export const handleDescribeTable = withBackgroundSupport("describe_table", _handleDescribeTable);

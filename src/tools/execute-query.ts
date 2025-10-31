@@ -10,19 +10,20 @@ import { validateConnectionString } from "../usql/connection.js";
 import { executeUsqlQuery } from "../usql/process-executor.js";
 import { parseUsqlError } from "../usql/parser.js";
 import { getQueryTimeout, resolveConnectionStringOrDefault } from "../usql/config.js";
+import { withBackgroundSupport } from "./background-wrapper.js";
 
 const logger = createLogger("usql-mcp:tools:execute-query");
 
 export const executeQuerySchema: Tool = {
   name: "execute_query",
-  description: "Execute a SQL query against a database and return results",
+  description: "Execute a SQL query against a database and return results. Uses default connection if none specified.",
   inputSchema: {
     type: "object",
     properties: {
       connection_string: {
         type: "string",
         description:
-          'Database connection URL or configured connection name. Can be a full URL (e.g., "postgres://user:pass@localhost/db") or a connection name from env vars (e.g., "oracle" for USQL_ORACLE, "postgres" for USQL_POSTGRES)',
+          '(Optional) Database connection URL or configured connection name. If omitted, uses the default connection from USQL_DEFAULT_CONNECTION. Can be a full URL (e.g., "postgres://user:pass@localhost/db") or a connection name from env vars (e.g., "oracle" for USQL_ORACLE, "postgres" for USQL_POSTGRES). Use get_server_info to discover available connections.',
       },
       query: {
         type: "string",
@@ -50,7 +51,7 @@ export const executeQuerySchema: Tool = {
   },
 };
 
-export async function handleExecuteQuery(input: ExecuteQueryInput): Promise<RawOutput> {
+async function _handleExecuteQuery(input: ExecuteQueryInput): Promise<RawOutput> {
   const outputFormat = input.output_format || "json";
 
   logger.debug("[execute-query] Handling request", {
@@ -154,3 +155,5 @@ export async function handleExecuteQuery(input: ExecuteQueryInput): Promise<RawO
     throw mcpError;
   }
 }
+
+export const handleExecuteQuery = withBackgroundSupport("execute_query", _handleExecuteQuery);

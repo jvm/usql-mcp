@@ -10,19 +10,20 @@ import { validateConnectionString } from "../usql/connection.js";
 import { executeUsqlQuery } from "../usql/process-executor.js";
 import { parseUsqlError } from "../usql/parser.js";
 import { getQueryTimeout, resolveConnectionStringOrDefault } from "../usql/config.js";
+import { withBackgroundSupport } from "./background-wrapper.js";
 
 const logger = createLogger("usql-mcp:tools:execute-script");
 
 export const executeScriptSchema: Tool = {
   name: "execute_script",
   description:
-    "Execute a multi-statement SQL script against a database. All statements are executed in sequence.",
+    "Execute a multi-statement SQL script against a database. All statements are executed in sequence. Uses default connection if none specified.",
   inputSchema: {
     type: "object",
     properties: {
       connection_string: {
         type: "string",
-        description: 'Database connection URL or configured connection name (e.g., "oracle" for USQL_ORACLE)',
+        description: '(Optional) Database connection URL or configured connection name. If omitted, uses the default connection from USQL_DEFAULT_CONNECTION (e.g., "oracle" for USQL_ORACLE). Use get_server_info to discover available connections.',
       },
       script: {
         type: "string",
@@ -44,7 +45,7 @@ export const executeScriptSchema: Tool = {
   },
 };
 
-export async function handleExecuteScript(input: ExecuteScriptInput): Promise<RawOutput> {
+async function _handleExecuteScript(input: ExecuteScriptInput): Promise<RawOutput> {
   const outputFormat = input.output_format || "json";
 
   logger.debug("[execute-script] Handling request", {
@@ -149,3 +150,5 @@ export async function handleExecuteScript(input: ExecuteScriptInput): Promise<Ra
     throw mcpError;
   }
 }
+
+export const handleExecuteScript = withBackgroundSupport("execute_script", _handleExecuteScript);

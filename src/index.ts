@@ -22,6 +22,13 @@ import { listDatabasesSchema, handleListDatabases } from "./tools/list-databases
 import { listTablesSchema, handleListTables } from "./tools/list-tables.js";
 import { describeTableSchema, handleDescribeTable } from "./tools/describe-table.js";
 import { executeScriptSchema, handleExecuteScript } from "./tools/execute-script.js";
+import { getJobStatusSchema, handleGetJobStatus } from "./tools/get-job-status.js";
+import { getServerInfoSchema, handleGetServerInfo } from "./tools/get-server-info.js";
+import { cancelJobSchema, handleCancelJob } from "./tools/cancel-job.js";
+
+// Import job manager
+import { initializeJobManager, shutdownJobManager, getJobManager } from "./usql/job-manager.js";
+import { getJobResultTtlMs } from "./usql/config.js";
 
 const logger = createLogger("usql-mcp:server");
 
@@ -33,10 +40,17 @@ class UsqlMcpServer {
     listTablesSchema,
     describeTableSchema,
     executeScriptSchema,
+    getJobStatusSchema,
+    getServerInfoSchema,
+    cancelJobSchema,
   ];
 
   constructor() {
     logger.debug("[server] Initializing MCP server");
+
+    // Initialize job manager with configured TTL
+    const jobResultTtl = getJobResultTtlMs();
+    initializeJobManager(jobResultTtl);
 
     this.server = new Server(
       {
@@ -119,13 +133,25 @@ class UsqlMcpServer {
       logger.error("[server] Server error", error);
     };
 
+    const gracefulShutdown = () => {
+      logger.info("[server] Shutting down, cleaning up job manager");
+      const jobManager = getJobManager();
+      const runningJobs = jobManager.getRunningJobs();
+      if (runningJobs.length > 0) {
+        logger.info("[server] Cancelling background jobs", { count: runningJobs.length });
+      }
+      shutdownJobManager();
+    };
+
     process.on("SIGTERM", () => {
       logger.info("[server] Received SIGTERM, shutting down");
+      gracefulShutdown();
       process.exit(0);
     });
 
     process.on("SIGINT", () => {
       logger.info("[server] Received SIGINT, shutting down");
+      gracefulShutdown();
       process.exit(0);
     });
   }
@@ -148,6 +174,15 @@ class UsqlMcpServer {
 
       case "execute_script":
         return await handleExecuteScript(input as Parameters<typeof handleExecuteScript>[0]);
+
+      case "get_job_status":
+        return await handleGetJobStatus(input as Parameters<typeof handleGetJobStatus>[0]);
+
+      case "get_server_info":
+        return await handleGetServerInfo();
+
+      case "cancel_job":
+        return await handleCancelJob(input as Parameters<typeof handleCancelJob>[0]);
 
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
