@@ -10,6 +10,7 @@ import { handleExecuteScript } from "../../src/tools/execute-script.js";
 import * as processExecutor from "../../src/usql/process-executor.js";
 import * as config from "../../src/usql/config.js";
 import * as connection from "../../src/usql/connection.js";
+import { BackgroundJobResponse, RawOutput } from "../../src/types/index.js";
 
 // Mock dependencies
 jest.mock("../../src/usql/process-executor.js");
@@ -38,6 +39,13 @@ describe("Tool Handlers", () => {
     mockValidateConnectionString.mockReturnValue(true);
   });
 
+  function unwrapRaw(result: RawOutput | BackgroundJobResponse): RawOutput {
+    if ("status" in result && result.status === "background") {
+      throw new Error("Unexpected background job response in unit test");
+    }
+    return result as RawOutput;
+  }
+
   describe("handleExecuteQuery", () => {
     it("executes a valid query successfully", async () => {
       mockExecuteUsqlQuery.mockResolvedValue({
@@ -51,8 +59,9 @@ describe("Tool Handlers", () => {
         connection_string: "postgres://localhost/db",
       });
 
-      expect(result.format).toBe("json");
-      expect(result.content).toBe('{"rows": [{"id": 1}]}');
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("json");
+      expect(rawResult.content).toBe('{"rows": [{"id": 1}]}');
       expect(mockExecuteUsqlQuery).toHaveBeenCalledWith(
         "postgres://localhost/testdb",
         "SELECT * FROM users",
@@ -72,8 +81,9 @@ describe("Tool Handlers", () => {
         output_format: "csv",
       });
 
-      expect(result.format).toBe("csv");
-      expect(result.content).toBe("id,name\n1,John");
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("csv");
+      expect(rawResult.content).toBe("id,name\n1,John");
       expect(mockExecuteUsqlQuery).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(String),
@@ -222,8 +232,9 @@ describe("Tool Handlers", () => {
 
       const result = await handleListDatabases({});
 
-      expect(result.format).toBe("json");
-      expect(result.content).toBe('{"databases": ["db1", "db2"]}');
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("json");
+      expect(rawResult.content).toBe('{"databases": ["db1", "db2"]}');
       expect(mockExecuteUsqlQuery).toHaveBeenCalledWith(
         "postgres://localhost/testdb",
         "\\l",
@@ -240,7 +251,8 @@ describe("Tool Handlers", () => {
 
       const result = await handleListDatabases({ output_format: "csv" });
 
-      expect(result.format).toBe("csv");
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("csv");
       expect(mockExecuteUsqlQuery).toHaveBeenCalledWith(
         expect.any(String),
         "\\l",
@@ -299,8 +311,9 @@ describe("Tool Handlers", () => {
 
       const result = await handleListTables({});
 
-      expect(result.format).toBe("json");
-      expect(result.content).toBe('{"tables": ["users", "orders"]}');
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("json");
+      expect(rawResult.content).toBe('{"tables": ["users", "orders"]}');
       expect(mockExecuteUsqlQuery).toHaveBeenCalledWith(
         "postgres://localhost/testdb",
         "\\dt",
@@ -317,7 +330,8 @@ describe("Tool Handlers", () => {
 
       const result = await handleListTables({ output_format: "csv" });
 
-      expect(result.format).toBe("csv");
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("csv");
     });
 
     it("handles list tables errors", async () => {
@@ -356,8 +370,9 @@ describe("Tool Handlers", () => {
 
       const result = await handleDescribeTable({ table: "users" });
 
-      expect(result.format).toBe("json");
-      expect(result.content).toContain("columns");
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("json");
+      expect(rawResult.content).toContain("columns");
       expect(mockExecuteUsqlQuery).toHaveBeenCalledWith(
         "postgres://localhost/testdb",
         "\\d users",
@@ -453,7 +468,8 @@ describe("Tool Handlers", () => {
         output_format: "csv",
       });
 
-      expect(result.format).toBe("csv");
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("csv");
     });
   });
 
@@ -469,8 +485,9 @@ describe("Tool Handlers", () => {
         script: "CREATE TABLE test (id INT); INSERT INTO test VALUES (1);",
       });
 
-      expect(result.format).toBe("json");
-      expect(result.content).toBe('{"result": "success"}');
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("json");
+      expect(rawResult.content).toBe('{"result": "success"}');
       expect(mockExecuteUsqlQuery).toHaveBeenCalledWith(
         "postgres://localhost/testdb",
         "CREATE TABLE test (id INT); INSERT INTO test VALUES (1);",
@@ -565,7 +582,8 @@ describe("Tool Handlers", () => {
         output_format: "csv",
       });
 
-      expect(result.format).toBe("csv");
+      const rawResult = unwrapRaw(result);
+      expect(rawResult.format).toBe("csv");
     });
 
     it("respects timeout_ms parameter", async () => {
