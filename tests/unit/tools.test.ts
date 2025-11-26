@@ -92,18 +92,14 @@ describe("Tool Handlers", () => {
     });
 
     it("throws error when query is missing", async () => {
-      await expect(
-        handleExecuteQuery({ query: "" } as any)
-      ).rejects.toMatchObject({
+      await expect(handleExecuteQuery({ query: "" } as any)).rejects.toMatchObject({
         error: "InvalidInput",
         message: expect.stringContaining("query is required"),
       });
     });
 
     it("throws error when query is not a string", async () => {
-      await expect(
-        handleExecuteQuery({ query: 123 } as any)
-      ).rejects.toMatchObject({
+      await expect(handleExecuteQuery({ query: 123 } as any)).rejects.toMatchObject({
         error: "InvalidInput",
         message: expect.stringContaining("query is required"),
       });
@@ -128,9 +124,7 @@ describe("Tool Handlers", () => {
         throw new Error("No connection configured");
       });
 
-      await expect(
-        handleExecuteQuery({ query: "SELECT 1" })
-      ).rejects.toMatchObject({
+      await expect(handleExecuteQuery({ query: "SELECT 1" })).rejects.toMatchObject({
         error: "InvalidConnection",
         message: expect.stringContaining("Failed to resolve connection"),
       });
@@ -143,9 +137,7 @@ describe("Tool Handlers", () => {
         exitCode: 1,
       });
 
-      await expect(
-        handleExecuteQuery({ query: "SELCT * FROM users" })
-      ).rejects.toMatchObject({
+      await expect(handleExecuteQuery({ query: "SELCT * FROM users" })).rejects.toMatchObject({
         error: "QueryExecutionError",
         message: expect.stringContaining("ERROR: syntax error"),
       });
@@ -263,9 +255,7 @@ describe("Tool Handlers", () => {
     it("throws error when connection string is invalid", async () => {
       mockValidateConnectionString.mockReturnValue(false);
 
-      await expect(
-        handleListDatabases({ connection_string: "invalid" })
-      ).rejects.toMatchObject({
+      await expect(handleListDatabases({ connection_string: "invalid" })).rejects.toMatchObject({
         error: expect.any(String),
         message: expect.stringContaining("Invalid connection string"),
       });
@@ -350,9 +340,7 @@ describe("Tool Handlers", () => {
     it("includes database parameter in error context", async () => {
       mockExecuteUsqlQuery.mockRejectedValue(new Error("Connection failed"));
 
-      await expect(
-        handleListTables({ database: "mydb" })
-      ).rejects.toMatchObject({
+      await expect(handleListTables({ database: "mydb" })).rejects.toMatchObject({
         details: expect.objectContaining({
           database: "mydb",
         }),
@@ -375,24 +363,20 @@ describe("Tool Handlers", () => {
       expect(rawResult.content).toContain("columns");
       expect(mockExecuteUsqlQuery).toHaveBeenCalledWith(
         "postgres://localhost/testdb",
-        "\\d users",
+        '\\d "users"',
         expect.objectContaining({ format: "json" })
       );
     });
 
     it("throws error when table parameter is missing", async () => {
-      await expect(
-        handleDescribeTable({ table: "" } as any)
-      ).rejects.toMatchObject({
+      await expect(handleDescribeTable({ table: "" } as any)).rejects.toMatchObject({
         error: "InvalidInput",
         message: expect.stringContaining("table is required"),
       });
     });
 
     it("throws error when table parameter is not a string", async () => {
-      await expect(
-        handleDescribeTable({ table: 123 } as any)
-      ).rejects.toMatchObject({
+      await expect(handleDescribeTable({ table: 123 } as any)).rejects.toMatchObject({
         error: "InvalidInput",
         message: expect.stringContaining("table is required"),
       });
@@ -405,9 +389,7 @@ describe("Tool Handlers", () => {
         exitCode: 0,
       });
 
-      await expect(
-        handleDescribeTable({ table: "nonexistent" })
-      ).rejects.toMatchObject({
+      await expect(handleDescribeTable({ table: "nonexistent" })).rejects.toMatchObject({
         error: "TableNotFound",
         message: expect.stringContaining("nonexistent"),
       });
@@ -420,9 +402,7 @@ describe("Tool Handlers", () => {
         exitCode: 0,
       });
 
-      await expect(
-        handleDescribeTable({ table: "missing" })
-      ).rejects.toMatchObject({
+      await expect(handleDescribeTable({ table: "missing" })).rejects.toMatchObject({
         error: "TableNotFound",
         message: expect.stringContaining("missing"),
       });
@@ -435,9 +415,7 @@ describe("Tool Handlers", () => {
         exitCode: 1,
       });
 
-      await expect(
-        handleDescribeTable({ table: "users" })
-      ).rejects.toMatchObject({
+      await expect(handleDescribeTable({ table: "users" })).rejects.toMatchObject({
         error: "DescribeTableError",
         message: expect.stringContaining("relation does not exist"),
       });
@@ -446,14 +424,14 @@ describe("Tool Handlers", () => {
     it("includes table and database in error context", async () => {
       mockExecuteUsqlQuery.mockRejectedValue(new Error("Connection failed"));
 
-      await expect(
-        handleDescribeTable({ table: "users", database: "mydb" })
-      ).rejects.toMatchObject({
-        details: expect.objectContaining({
-          table: "users",
-          database: "mydb",
-        }),
-      });
+      await expect(handleDescribeTable({ table: "users", database: "mydb" })).rejects.toMatchObject(
+        {
+          details: expect.objectContaining({
+            table: "users",
+            database: "mydb",
+          }),
+        }
+      );
     });
 
     it("respects output_format parameter", async () => {
@@ -496,27 +474,21 @@ describe("Tool Handlers", () => {
     });
 
     it("throws error when script is missing", async () => {
-      await expect(
-        handleExecuteScript({ script: "" } as any)
-      ).rejects.toMatchObject({
+      await expect(handleExecuteScript({ script: "" } as any)).rejects.toMatchObject({
         error: "InvalidInput",
         message: expect.stringContaining("script is required"),
       });
     });
 
     it("throws error when script is not a string", async () => {
-      await expect(
-        handleExecuteScript({ script: null } as any)
-      ).rejects.toMatchObject({
+      await expect(handleExecuteScript({ script: null } as any)).rejects.toMatchObject({
         error: "InvalidInput",
         message: expect.stringContaining("script is required"),
       });
     });
 
     it("throws error when script is empty after trimming", async () => {
-      await expect(
-        handleExecuteScript({ script: "   \n\n  " })
-      ).rejects.toMatchObject({
+      await expect(handleExecuteScript({ script: "   \n\n  " })).rejects.toMatchObject({
         error: "InvalidInput",
         message: expect.stringContaining("script cannot be empty"),
       });
@@ -562,9 +534,7 @@ describe("Tool Handlers", () => {
         exitCode: 1,
       });
 
-      await expect(
-        handleExecuteScript({ script: "SELECT 1; SELCT 2;" })
-      ).rejects.toMatchObject({
+      await expect(handleExecuteScript({ script: "SELECT 1; SELCT 2;" })).rejects.toMatchObject({
         error: "ScriptExecutionError",
         message: expect.stringContaining("syntax error"),
       });
@@ -609,9 +579,7 @@ describe("Tool Handlers", () => {
       mockExecuteUsqlQuery.mockRejectedValue(new Error("Execution failed"));
 
       const longScript = "SELECT * FROM users;".repeat(100);
-      await expect(
-        handleExecuteScript({ script: longScript })
-      ).rejects.toMatchObject({
+      await expect(handleExecuteScript({ script: longScript })).rejects.toMatchObject({
         details: expect.objectContaining({
           scriptLength: longScript.length,
         }),

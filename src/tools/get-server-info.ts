@@ -4,7 +4,13 @@
 
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createLogger } from "../utils/logger.js";
-import { loadConfig, getDefaultConnectionName, getBackgroundThresholdMs, getJobResultTtlMs, getQueryTimeout } from "../usql/config.js";
+import {
+  loadConfig,
+  getDefaultConnectionName,
+  getBackgroundThresholdMs,
+  getJobResultTtlMs,
+  getQueryTimeout,
+} from "../usql/config.js";
 
 const logger = createLogger("usql-mcp:tools:get-server-info");
 
@@ -14,6 +20,7 @@ export interface ServerInfo {
   background_execution_threshold_ms: number;
   job_result_ttl_ms: number;
   query_timeout_ms?: number;
+  elapsed_ms_scope: string;
 }
 
 export const getServerInfoSchema: Tool = {
@@ -42,6 +49,8 @@ export async function handleGetServerInfo(): Promise<ServerInfo> {
     available_connections: availableConnections,
     background_execution_threshold_ms: backgroundThreshold,
     job_result_ttl_ms: jobResultTtl,
+    elapsed_ms_scope:
+      "Per-process: elapsed_ms is computed from job start to completion/now within the current server lifetime.",
   };
 
   // Only include default_connection if one is configured

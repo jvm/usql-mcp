@@ -48,36 +48,35 @@ usql-mcp/
 └── README.md
 ```
 
-## Essential Commands
+## Essential Commands (follow this workflow strictly)
 
 ### Development Workflow
 
+> Always execute these steps in order when making changes. Do not skip lint/type-check/test/build before finishing.
+
 ```bash
-# Install dependencies (includes MCP SDK)
+# 1) Install dependencies (includes MCP SDK)
 npm install
 
-# TypeScript compilation
+# 2) TypeScript compilation (required before running server)
 npm run build
 
-# Run compiled server (outputs to stdio for MCP protocol)
+# 3) Run compiled server (outputs to stdio for MCP protocol)
 node dist/index.js
 
-# Development mode with auto-rebuild
+# 4) Development mode with auto-rebuild (use while iterating)
 npm run dev
 
-# Run test suite
+# 5) Run test suite (mandatory): unit + integration if present
 npm test
 
-# Run single test file
-npm test -- describe-table.test.ts
-
-# Type checking
+# 6) Type checking (mandatory)
 npm run type-check
 
-# Linting
+# 7) Linting (mandatory)
 npm run lint
 
-# Format code
+# 8) Format code (mandatory before finalizing changes)
 npm run format
 ```
 

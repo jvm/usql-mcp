@@ -53,12 +53,12 @@ describe("parseUsqlError", () => {
     expect(result).toBe("Connection timeout");
   });
 
-  it("returns raw stderr when all lines are empty", () => {
+  it("returns default message when all lines are empty", () => {
     const stderr = "\n\n\n";
 
     const result = parseUsqlError(stderr);
 
-    expect(result).toBe("\n\n\n");
+    expect(result).toBe("Unknown error");
   });
 
   it("returns default message for empty stderr", () => {
@@ -80,7 +80,7 @@ describe("parseUsqlError", () => {
 
     const result = parseUsqlError(stderr);
 
-    expect(result).toBe("    \t\n   \t   \n");
+    expect(result).toBe("Unknown error");
   });
 
   it("handles multiline error messages correctly", () => {

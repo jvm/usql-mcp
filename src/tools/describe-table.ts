@@ -10,19 +10,22 @@ import { validateConnectionString } from "../usql/connection.js";
 import { executeUsqlQuery } from "../usql/process-executor.js";
 import { parseUsqlError } from "../usql/parser.js";
 import { getQueryTimeout, resolveConnectionStringOrDefault } from "../usql/config.js";
+import { detectDatabaseType, getDescribeTableCommand } from "../utils/database-mapper.js";
 import { withBackgroundSupport } from "./background-wrapper.js";
 
 const logger = createLogger("usql-mcp:tools:describe-table");
 
 export const describeTableSchema: Tool = {
   name: "describe_table",
-  description: "Get detailed schema information for a specific table (columns, types, constraints). Uses default connection if none specified.",
+  description:
+    "Get detailed schema information for a specific table (columns, types, constraints). Uses default connection if none specified.",
   inputSchema: {
     type: "object",
     properties: {
       connection_string: {
         type: "string",
-        description: '(Optional) Database connection URL or configured connection name. If omitted, uses the default connection from USQL_DEFAULT_CONNECTION (e.g., "oracle" for USQL_ORACLE). Use get_server_info to discover available connections.',
+        description:
+          '(Optional) Database connection URL or configured connection name. If omitted, uses the default connection from USQL_DEFAULT_CONNECTION (e.g., "oracle" for USQL_ORACLE). Use get_server_info to discover available connections.',
       },
       table: {
         type: "string",
@@ -39,7 +42,8 @@ export const describeTableSchema: Tool = {
       },
       timeout_ms: {
         type: ["number", "null"],
-        description: "Optional timeout in milliseconds for this call (overrides defaults). Use null for unlimited.",
+        description:
+          "Optional timeout in milliseconds for this call (overrides defaults). Use null for unlimited.",
         minimum: 1,
       },
     },
@@ -78,16 +82,16 @@ async function _handleDescribeTable(input: DescribeTableInput): Promise<RawOutpu
       );
     }
 
-    // Build describe query
-    // Use usql's \d command to describe table
-    const query = `\\d ${input.table}`;
+    // Build describe query - Use database-specific command
+    const dbType = detectDatabaseType(resolvedConnectionString);
+    const query = getDescribeTableCommand(dbType, input.table);
 
     const timeoutOverride =
       input.timeout_ms === null
         ? undefined
         : typeof input.timeout_ms === "number" && Number.isFinite(input.timeout_ms)
-        ? input.timeout_ms
-        : undefined;
+          ? input.timeout_ms
+          : undefined;
     const timeout = timeoutOverride ?? getQueryTimeout();
     logger.debug("[describe-table] Executing describe command", {
       timeout,
@@ -117,21 +121,17 @@ async function _handleDescribeTable(input: DescribeTableInput): Promise<RawOutpu
       }
       // Some databases don't error on missing table, check output
       if (!result.stdout.trim()) {
-        throw createUsqlError(
-          "TableNotFound",
-          `Table not found: ${input.table}`,
-          { table: input.table }
-        );
+        throw createUsqlError("TableNotFound", `Table not found: ${input.table}`, {
+          table: input.table,
+        });
       }
     }
 
     // Check for empty output
     if (!result.stdout.trim()) {
-      throw createUsqlError(
-        "TableNotFound",
-        `Table not found: ${input.table}`,
-        { table: input.table }
-      );
+      throw createUsqlError("TableNotFound", `Table not found: ${input.table}`, {
+        table: input.table,
+      });
     }
 
     logger.debug("[describe-table] Table schema retrieved", {

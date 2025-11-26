@@ -5,7 +5,11 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { ExecuteQueryInput, RawOutput } from "../types/index.js";
 import { createLogger } from "../utils/logger.js";
-import { createUsqlError, formatMcpError, sanitizeConnectionString } from "../utils/error-handler.js";
+import {
+  createUsqlError,
+  formatMcpError,
+  sanitizeConnectionString,
+} from "../utils/error-handler.js";
 import { validateConnectionString } from "../usql/connection.js";
 import { executeUsqlQuery } from "../usql/process-executor.js";
 import { parseUsqlError } from "../usql/parser.js";
@@ -16,7 +20,8 @@ const logger = createLogger("usql-mcp:tools:execute-query");
 
 export const executeQuerySchema: Tool = {
   name: "execute_query",
-  description: "Execute a SQL query against a database and return results. Uses default connection if none specified.",
+  description:
+    "Execute a SQL query against a database and return results. Uses default connection if none specified.",
   inputSchema: {
     type: "object",
     properties: {
@@ -43,7 +48,8 @@ export const executeQuerySchema: Tool = {
       },
       timeout_ms: {
         type: ["number", "null"],
-        description: "Optional timeout in milliseconds for this call (overrides defaults). Use null for unlimited.",
+        description:
+          "Optional timeout in milliseconds for this call (overrides defaults). Use null for unlimited.",
         minimum: 1,
       },
     },
@@ -86,23 +92,25 @@ async function _handleExecuteQuery(input: ExecuteQueryInput): Promise<RawOutput>
       );
     }
 
-    // Process parameters if provided
-    const processedQuery = input.query;
+    // Validate parameters are not provided (not yet implemented)
     if (input.parameters && input.parameters.length > 0) {
-      logger.debug("[execute-query] Processing parameterized query", {
-        parameterCount: input.parameters.length,
-      });
-      // Parameters will be passed via usql's prepared statement handling
-      // For now, we support basic parameter substitution
+      throw createUsqlError(
+        "NotImplemented",
+        "Query parameters are not yet supported. Please include parameter values directly in the SQL query. " +
+          "Note: This is a security limitation - prepared statements cannot be implemented via the usql CLI. " +
+          "If you need parameterized queries, consider using a native database driver."
+      );
     }
+
+    const processedQuery = input.query;
 
     // Execute query
     const timeoutOverride =
       input.timeout_ms === null
         ? undefined
         : typeof input.timeout_ms === "number" && Number.isFinite(input.timeout_ms)
-        ? input.timeout_ms
-        : undefined;
+          ? input.timeout_ms
+          : undefined;
     const timeout = timeoutOverride ?? getQueryTimeout();
     logger.debug("[execute-query] Executing query with timeout", { timeout });
 
@@ -140,12 +148,15 @@ async function _handleExecuteQuery(input: ExecuteQueryInput): Promise<RawOutput>
     // Use user-provided connection string for error details (before resolution)
     // This ensures we sanitize what the user actually provided
     const connectionForError = input.connection_string || resolvedConnectionString;
-    const queryForError = typeof input.query === "string" ? input.query.substring(0, 200) : undefined;
+    const queryForError =
+      typeof input.query === "string" ? input.query.substring(0, 200) : undefined;
     const mcpError = formatMcpError(
       error,
       connectionForError || queryForError
         ? {
-            connectionString: connectionForError ? sanitizeConnectionString(connectionForError) : undefined,
+            connectionString: connectionForError
+              ? sanitizeConnectionString(connectionForError)
+              : undefined,
             query: queryForError,
           }
         : undefined

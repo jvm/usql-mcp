@@ -63,7 +63,7 @@ export function formatMcpError(error: unknown, context?: Record<string, unknown>
     if (typeof maybe.error === "string" && typeof maybe.message === "string") {
       return {
         error: maybe.error,
-        message: maybe.message,
+        message: sanitizeString(maybe.message),
         details: mergeDetails(maybe.details ? { ...maybe.details } : undefined),
       };
     }
@@ -71,7 +71,7 @@ export function formatMcpError(error: unknown, context?: Record<string, unknown>
     if (typeof maybe.code === "string" && typeof maybe.message === "string") {
       return {
         error: maybe.code,
-        message: maybe.message,
+        message: sanitizeString(maybe.message),
         details: mergeDetails(maybe.details ? { ...maybe.details } : undefined),
       };
     }
@@ -80,7 +80,7 @@ export function formatMcpError(error: unknown, context?: Record<string, unknown>
   if (error instanceof UsqlError) {
     return {
       error: error.code,
-      message: error.message,
+      message: sanitizeString(error.message),
       details: mergeDetails(error.details),
     };
   }
@@ -92,7 +92,7 @@ export function formatMcpError(error: unknown, context?: Record<string, unknown>
         error: "UsqlNotFound",
         message:
           "usql command not found. Please ensure usql is installed and in PATH. See https://github.com/xo/usql#installation",
-        details: mergeDetails({ originalError: error.message }),
+        details: mergeDetails(undefined),
       };
     }
 
@@ -100,7 +100,7 @@ export function formatMcpError(error: unknown, context?: Record<string, unknown>
       return {
         error: "ConnectionError",
         message: "Database connection refused. Check host, port, and credentials.",
-        details: mergeDetails({ originalError: error.message }),
+        details: mergeDetails(undefined),
       };
     }
 
@@ -115,7 +115,7 @@ export function formatMcpError(error: unknown, context?: Record<string, unknown>
     // Generic database error
     return {
       error: "QueryError",
-      message: error.message,
+      message: sanitizeString(error.message),
       details: mergeDetails(undefined),
     };
   }
@@ -124,7 +124,7 @@ export function formatMcpError(error: unknown, context?: Record<string, unknown>
   return {
     error: "UnknownError",
     message: "An unexpected error occurred",
-    details: mergeDetails({ originalError: String(error) }),
+    details: mergeDetails(undefined),
   };
 }
 
@@ -134,4 +134,7 @@ export function createUsqlError(
   details?: Record<string, unknown>
 ): UsqlError {
   return new UsqlError(code, message, details);
+}
+function sanitizeString(str: string): string {
+  return str.replace(/:([^@/]*?)@/, ":***@");
 }

@@ -2,7 +2,11 @@
  * Unit tests for error handling
  */
 
-import { formatMcpError, sanitizeConnectionString, createUsqlError } from "../../src/utils/error-handler.js";
+import {
+  formatMcpError,
+  sanitizeConnectionString,
+  createUsqlError,
+} from "../../src/utils/error-handler.js";
 
 describe("Error Handler", () => {
   describe("formatMcpError", () => {

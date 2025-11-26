@@ -1,12 +1,13 @@
 /**
  * Configuration loader for usql-mcp
- * Loads config from file and environment variables
+ * Loads config from file and environment variables with validation
  */
 
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { UsqlConfig, ConnectionConfig } from "../types/index.js";
 import { createLogger } from "../utils/logger.js";
+import { validateConfig, ConfigValidationError } from "../utils/config-validator.js";
 
 const logger = createLogger("usql-mcp:config");
 
@@ -33,7 +34,67 @@ export function loadConfig(): UsqlConfig {
   try {
     const fullPath = resolve(configPath);
     const content = readFileSync(fullPath, "utf-8");
-    const fileConfig = JSON.parse(content) as UsqlConfig;
+    const rawConfig = JSON.parse(content);
+
+    // Validate the config file format
+    let fileConfig: UsqlConfig;
+    try {
+      // Extract top-level settings for validation (ignore nested connections/defaults)
+      const settingsToValidate: Record<string, unknown> = {};
+      if ("queryTimeoutMs" in rawConfig) settingsToValidate.queryTimeoutMs = rawConfig.queryTimeoutMs;
+      if ("jobResultTtlMs" in rawConfig) settingsToValidate.jobResultTtlMs = rawConfig.jobResultTtlMs;
+      if ("allowDestructiveOperations" in rawConfig) settingsToValidate.allowDestructiveOperations = rawConfig.allowDestructiveOperations;
+
+      const validated = validateConfig(settingsToValidate);
+      logger.debug("[config] Config file validation passed", { path: configPath });
+
+      // Transform validated config into UsqlConfig format
+      fileConfig = {
+        connections: {},
+        defaults: {
+          queryTimeout: validated.queryTimeoutMs,
+          maxResultRows: 10000,
+          defaultConnection: undefined,
+          backgroundThresholdMs: 30000,
+          jobResultTtlMs: validated.jobResultTtlMs || 3600000,
+        },
+      };
+
+      // Handle connections from config file if present
+      if (rawConfig.connections && typeof rawConfig.connections === "object") {
+        for (const [name, connConfig] of Object.entries(rawConfig.connections)) {
+          if (connConfig && typeof connConfig === "object") {
+            const conn = connConfig as Record<string, unknown>;
+            fileConfig.connections[name.toLowerCase()] = {
+              uri: (conn.uri as string) || "",
+              description: conn.description as string | undefined,
+            };
+          }
+        }
+      }
+
+      // Handle defaults from config file if present
+      if (rawConfig.defaults && typeof rawConfig.defaults === "object") {
+        const defaults = rawConfig.defaults as Record<string, unknown>;
+        if (fileConfig.defaults) {
+          if (defaults.queryTimeout !== undefined && typeof defaults.queryTimeout === "number") {
+            fileConfig.defaults.queryTimeout = defaults.queryTimeout;
+          }
+          if (defaults.maxResultRows !== undefined && typeof defaults.maxResultRows === "number") {
+            fileConfig.defaults.maxResultRows = defaults.maxResultRows;
+          }
+          if (defaults.defaultConnection !== undefined && typeof defaults.defaultConnection === "string") {
+            fileConfig.defaults.defaultConnection = defaults.defaultConnection.toLowerCase();
+          }
+        }
+      }
+    } catch (validationError) {
+      if (validationError instanceof ConfigValidationError) {
+        logger.error("[config] Config validation failed", validationError.message);
+        throw new Error(`Invalid config.json: ${validationError.message}`);
+      }
+      throw validationError;
+    }
 
     logger.debug("[config] Loaded config from file", { path: configPath });
 
@@ -171,13 +232,14 @@ export function resolveConnectionStringOrDefault(nameOrUri?: string): string {
   const defaultConnection = getDefaultConnectionName();
   if (!defaultConnection) {
     const availableConnections = Object.keys(loadConfig().connections);
-    const availableStr = availableConnections.length > 0
-      ? `Available connections: ${availableConnections.join(", ")}. `
-      : "No named connections are configured. ";
+    const availableStr =
+      availableConnections.length > 0
+        ? `Available connections: ${availableConnections.join(", ")}. `
+        : "No named connections are configured. ";
     throw new Error(
       `No connection string provided and no default connection configured. ${availableStr}` +
-      `Set USQL_DEFAULT_CONNECTION environment variable or provide a connection_string parameter to the tool. ` +
-      `Use get_server_info to see available options.`
+        `Set USQL_DEFAULT_CONNECTION environment variable or provide a connection_string parameter to the tool. ` +
+        `Use get_server_info to see available options.`
     );
   }
 
