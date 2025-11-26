@@ -40,6 +40,7 @@ export async function executeUsqlCommand(
   return new Promise((resolve, reject) => {
     let stdout = "";
     let stderr = "";
+    const maxBuffer = 512 * 1024; // 512 KB cap per stream
     let timedOut = false;
     let aborted = false;
     let timeoutHandle: NodeJS.Timeout | null = null;
@@ -49,9 +50,15 @@ export async function executeUsqlCommand(
       timeoutHandle = setTimeout(() => {
         timedOut = true;
         if (childProcess?.pid) {
-          logger.debug("[process-executor] Query timeout, killing process", { pid: childProcess.pid });
+          logger.debug("[process-executor] Query timeout, killing process", {
+            pid: childProcess.pid,
+          });
           try {
-            process.kill(-childProcess.pid);
+            try {
+              process.kill(-childProcess.pid);
+            } catch {
+              process.kill(childProcess.pid);
+            }
           } catch (e) {
             logger.warn("[process-executor] Failed to kill process", { error: e });
           }
@@ -73,12 +80,18 @@ export async function executeUsqlCommand(
         return;
       }
 
-      const abortHandler = () => {
+      const abortHandler = (): void => {
         aborted = true;
-        logger.debug("[process-executor] Abort signal received, killing process", { pid: childProcess?.pid });
+        logger.debug("[process-executor] Abort signal received, killing process", {
+          pid: childProcess?.pid,
+        });
         if (childProcess?.pid) {
           try {
-            process.kill(-childProcess.pid);
+            try {
+              process.kill(-childProcess.pid);
+            } catch {
+              process.kill(childProcess.pid);
+            }
           } catch (e) {
             logger.warn("[process-executor] Failed to kill process on abort", { error: e });
           }
@@ -87,13 +100,25 @@ export async function executeUsqlCommand(
       };
 
       signal.addEventListener("abort", abortHandler);
+      const removeAbortHandler = (): void => {
+        signal.removeEventListener("abort", abortHandler);
+      };
+      // Attach cleanup listeners once we have a process instance
+      const attachCleanup = (proc: ChildProcess): void => {
+        proc.on("error", removeAbortHandler);
+        proc.on("close", removeAbortHandler);
+      };
+      if (childProcess) {
+        attachCleanup(childProcess);
+      }
     }
 
     // Build usql arguments
     const args = [connectionString, "-c", command];
 
     const configuredCommand = process.env.USQL_BINARY_PATH?.trim();
-    const commandToRun = configuredCommand && configuredCommand.length > 0 ? configuredCommand : "usql";
+    const commandToRun =
+      configuredCommand && configuredCommand.length > 0 ? configuredCommand : "usql";
 
     // Add format flag
     if (format === "json") {
@@ -106,6 +131,7 @@ export async function executeUsqlCommand(
     childProcess = spawn(commandToRun, args, {
       detached: true,
       stdio: ["pipe", "pipe", "pipe"],
+      env: process.env,
     });
 
     logger.debug("[process-executor] Spawned usql process", {
@@ -115,11 +141,17 @@ export async function executeUsqlCommand(
     });
 
     childProcess.stdout?.on("data", (data) => {
-      stdout += data.toString();
+      const chunk = data.toString();
+      if (stdout.length + chunk.length <= maxBuffer) {
+        stdout += chunk;
+      }
     });
 
     childProcess.stderr?.on("data", (data) => {
-      stderr += data.toString();
+      const chunk = data.toString();
+      if (stderr.length + chunk.length <= maxBuffer) {
+        stderr += chunk;
+      }
     });
 
     childProcess.on("error", (error) => {
@@ -169,3 +201,4 @@ export async function executeUsqlQuery(
     format: options?.format || "json",
   });
 }
+/* global AbortSignal */

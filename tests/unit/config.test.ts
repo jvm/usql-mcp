@@ -216,9 +216,7 @@ describe("Config Module", () => {
     it("throws error for unknown connection name", () => {
       resetConfigCache();
 
-      expect(() => resolveConnectionString("unknown")).toThrow(
-        /Connection not found: unknown/
-      );
+      expect(() => resolveConnectionString("unknown")).toThrow(/Connection not found: unknown/);
     });
 
     it("includes available connections in error message", () => {

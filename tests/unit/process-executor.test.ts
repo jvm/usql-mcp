@@ -20,7 +20,7 @@ describe("Process Executor", () => {
     jest.useFakeTimers();
 
     // Mock process.kill to avoid ESRCH errors with fake timers
-    mockProcessKill = jest.spyOn(process, 'kill').mockImplementation(() => true);
+    mockProcessKill = jest.spyOn(process, "kill").mockImplementation(() => true);
 
     delete process.env.USQL_BINARY_PATH;
 
@@ -49,11 +49,9 @@ describe("Process Executor", () => {
 
   describe("executeUsqlCommand", () => {
     it("executes usql command successfully with JSON format", async () => {
-      const promise = executeUsqlCommand(
-        "postgres://localhost/db",
-        "SELECT * FROM users",
-        { format: "json" }
-      );
+      const promise = executeUsqlCommand("postgres://localhost/db", "SELECT * FROM users", {
+        format: "json",
+      });
 
       // Simulate successful execution
       mockStdout.emit("data", Buffer.from('{"result": "data"}'));
@@ -64,7 +62,7 @@ describe("Process Executor", () => {
       expect(spawn).toHaveBeenCalledWith(
         "usql",
         ["postgres://localhost/db", "-c", "SELECT * FROM users", "--json"],
-        { detached: true, stdio: ["pipe", "pipe", "pipe"] }
+        expect.objectContaining({ detached: true, stdio: ["pipe", "pipe", "pipe"] })
       );
       expect(result.stdout).toBe('{"result": "data"}');
       expect(result.stderr).toBe("");
@@ -73,11 +71,9 @@ describe("Process Executor", () => {
     });
 
     it("executes usql command with CSV format", async () => {
-      const promise = executeUsqlCommand(
-        "postgres://localhost/db",
-        "SELECT * FROM users",
-        { format: "csv" }
-      );
+      const promise = executeUsqlCommand("postgres://localhost/db", "SELECT * FROM users", {
+        format: "csv",
+      });
 
       mockStdout.emit("data", Buffer.from("id,name\n1,John"));
       mockChildProcess.emit("close", 0);
@@ -87,7 +83,7 @@ describe("Process Executor", () => {
       expect(spawn).toHaveBeenCalledWith(
         "usql",
         ["postgres://localhost/db", "-c", "SELECT * FROM users", "--csv"],
-        { detached: true, stdio: ["pipe", "pipe", "pipe"] }
+        expect.objectContaining({ detached: true, stdio: ["pipe", "pipe", "pipe"] })
       );
       expect(result.stdout).toBe("id,name\n1,John");
     });
@@ -105,11 +101,9 @@ describe("Process Executor", () => {
     });
 
     it("handles timeout correctly", async () => {
-      const promise = executeUsqlCommand(
-        "postgres://localhost/db",
-        "SELECT * FROM users",
-        { timeout: 100 }
-      );
+      const promise = executeUsqlCommand("postgres://localhost/db", "SELECT * FROM users", {
+        timeout: 100,
+      });
 
       // Advance timers to trigger timeout
       jest.advanceTimersByTime(101);
@@ -128,11 +122,7 @@ describe("Process Executor", () => {
     });
 
     it("does not reject twice on timeout followed by error", async () => {
-      const promise = executeUsqlCommand(
-        "postgres://localhost/db",
-        "SELECT 1",
-        { timeout: 50 }
-      );
+      const promise = executeUsqlCommand("postgres://localhost/db", "SELECT 1", { timeout: 50 });
 
       // Advance timers to trigger timeout
       jest.advanceTimersByTime(51);
@@ -144,11 +134,7 @@ describe("Process Executor", () => {
     });
 
     it("clears timeout on successful completion", async () => {
-      const promise = executeUsqlCommand(
-        "postgres://localhost/db",
-        "SELECT 1",
-        { timeout: 5000 }
-      );
+      const promise = executeUsqlCommand("postgres://localhost/db", "SELECT 1", { timeout: 5000 });
 
       mockStdout.emit("data", Buffer.from("result"));
       mockChildProcess.emit("close", 0);
@@ -160,11 +146,7 @@ describe("Process Executor", () => {
     });
 
     it("clears timeout on error", async () => {
-      const promise = executeUsqlCommand(
-        "postgres://localhost/db",
-        "INVALID",
-        { timeout: 5000 }
-      );
+      const promise = executeUsqlCommand("postgres://localhost/db", "INVALID", { timeout: 5000 });
 
       const error = new Error("Query error");
       mockChildProcess.emit("error", error);
@@ -307,10 +289,7 @@ describe("Process Executor", () => {
 
   describe("executeUsqlQuery", () => {
     it("is a convenience wrapper that calls executeUsqlCommand", async () => {
-      const promise = executeUsqlQuery(
-        "mysql://localhost/db",
-        "SELECT * FROM products"
-      );
+      const promise = executeUsqlQuery("mysql://localhost/db", "SELECT * FROM products");
 
       mockStdout.emit("data", Buffer.from('{"products": []}'));
       mockChildProcess.emit("close", 0);

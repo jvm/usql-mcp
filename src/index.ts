@@ -112,7 +112,7 @@ class UsqlMcpServer {
           content: [
             {
               type: "text",
-              text: JSON.stringify(resultWithTiming, null, 2),
+              text: JSON.stringify(resultWithTiming),
             },
           ],
         };
@@ -130,7 +130,6 @@ class UsqlMcpServer {
         const errorResponse = {
           error: mcpError.error,
           message: mcpError.message,
-          ...(mcpError.details ? { details: mcpError.details } : {}),
           elapsed_ms: elapsedMs,
         };
 
@@ -138,7 +137,7 @@ class UsqlMcpServer {
           content: [
             {
               type: "text",
-              text: JSON.stringify(errorResponse, null, 2),
+              text: JSON.stringify(errorResponse),
               isError: true,
             },
           ],
@@ -154,7 +153,7 @@ class UsqlMcpServer {
       logger.error("[server] Server error", error);
     };
 
-    const gracefulShutdown = () => {
+    const gracefulShutdown = (): void => {
       logger.info("[server] Shutting down, cleaning up job manager");
       const jobManager = getJobManager();
       const runningJobs = jobManager.getRunningJobs();

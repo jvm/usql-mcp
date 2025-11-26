@@ -23,7 +23,8 @@ export const executeScriptSchema: Tool = {
     properties: {
       connection_string: {
         type: "string",
-        description: '(Optional) Database connection URL or configured connection name. If omitted, uses the default connection from USQL_DEFAULT_CONNECTION (e.g., "oracle" for USQL_ORACLE). Use get_server_info to discover available connections.',
+        description:
+          '(Optional) Database connection URL or configured connection name. If omitted, uses the default connection from USQL_DEFAULT_CONNECTION (e.g., "oracle" for USQL_ORACLE). Use get_server_info to discover available connections.',
       },
       script: {
         type: "string",
@@ -37,7 +38,8 @@ export const executeScriptSchema: Tool = {
       },
       timeout_ms: {
         type: ["number", "null"],
-        description: "Optional timeout in milliseconds for this call (overrides defaults). Use null for unlimited.",
+        description:
+          "Optional timeout in milliseconds for this call (overrides defaults). Use null for unlimited.",
         minimum: 1,
       },
     },
@@ -100,8 +102,8 @@ async function _handleExecuteScript(input: ExecuteScriptInput): Promise<RawOutpu
       input.timeout_ms === null
         ? undefined
         : typeof input.timeout_ms === "number" && Number.isFinite(input.timeout_ms)
-        ? input.timeout_ms
-        : undefined;
+          ? input.timeout_ms
+          : undefined;
     const timeout = timeoutOverride ?? getQueryTimeout();
     logger.debug("[execute-script] Executing script with timeout", { timeout, outputFormat });
 

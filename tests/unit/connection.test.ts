@@ -83,9 +83,7 @@ describe("Connection String Parsing", () => {
     });
 
     it("should preserve other connection details", () => {
-      const result = formatConnectionStringForLogging(
-        "postgres://user:pass@localhost:5432/mydb"
-      );
+      const result = formatConnectionStringForLogging("postgres://user:pass@localhost:5432/mydb");
       expect(result).toContain("postgres://");
       expect(result).toContain("user");
       expect(result).toContain("localhost");
@@ -137,9 +135,7 @@ describe("Connection String Parsing", () => {
     });
 
     it("should parse full IPv6 addresses", () => {
-      const result = parseConnectionString(
-        "postgres://user:pass@[2001:db8::1]:5432/db"
-      );
+      const result = parseConnectionString("postgres://user:pass@[2001:db8::1]:5432/db");
       expect(result.host).toBe("[2001:db8::1]");
       expect(result.port).toBe("5432");
     });

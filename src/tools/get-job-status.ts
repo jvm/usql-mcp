@@ -5,7 +5,7 @@
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createLogger } from "../utils/logger.js";
 import { createUsqlError, formatMcpError } from "../utils/error-handler.js";
-import { getJobManager } from "../usql/job-manager.js";
+import { getJobManager, JobState } from "../usql/job-manager.js";
 import { JobStatusResponse } from "../types/index.js";
 
 const logger = createLogger("usql-mcp:tools:get-job-status");
@@ -17,7 +17,8 @@ interface GetJobStatusInput {
 
 export const getJobStatusSchema: Tool = {
   name: "get_job_status",
-  description: "Check the status of a background job and retrieve results when available. This tool will wait for the specified duration before checking, preventing inefficient tight polling loops.",
+  description:
+    "Check the status of a background job and retrieve results when available. This tool will wait for the specified duration before checking, preventing inefficient tight polling loops.",
   inputSchema: {
     type: "object",
     properties: {
@@ -62,17 +63,10 @@ export async function handleGetJobStatus(input: GetJobStatusInput): Promise<JobS
     }
 
     // Wait before checking job status
-    logger.debug("[get-job-status] Waiting before checking status", {
-      jobId: input.job_id,
-      waitSeconds,
-    });
-
-    await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
-
     const jobManager = getJobManager();
-    const jobState = jobManager.getJob(input.job_id);
+    const initialJobState = jobManager.getJob(input.job_id);
 
-    if (!jobState) {
+    if (!initialJobState) {
       logger.warn("[get-job-status] Job not found", { jobId: input.job_id });
       throw createUsqlError(
         "JobNotFound",
@@ -81,37 +75,72 @@ export async function handleGetJobStatus(input: GetJobStatusInput): Promise<JobS
       );
     }
 
-    const now = new Date();
-    const elapsedMs = now.getTime() - jobState.startedAt.getTime();
+    // If job already finished, return immediately
+    if (initialJobState.status !== "running") {
+      const elapsedMs = calculateElapsedMs(initialJobState);
+      return buildJobStatusResponse(initialJobState, elapsedMs);
+    }
 
-    logger.debug("[get-job-status] Job found", {
+    // Wait up to waitSeconds for completion; return early if done
+    logger.debug("[get-job-status] Waiting for job completion", {
       jobId: input.job_id,
-      status: jobState.status,
+      waitSeconds,
+    });
+
+    const waitedState = await jobManager.waitForCompletion(input.job_id, waitSeconds * 1000);
+    const finalState = waitedState ?? jobManager.getJob(input.job_id);
+
+    if (!finalState) {
+      logger.warn("[get-job-status] Job disappeared after waiting", { jobId: input.job_id });
+      throw createUsqlError(
+        "JobNotFound",
+        `Job not found: ${input.job_id}. The job may have completed and been cleaned up (default cleanup: 1 hour).`,
+        { jobId: input.job_id }
+      );
+    }
+
+    const elapsedMs = calculateElapsedMs(finalState);
+    logger.debug("[get-job-status] Returning job status", {
+      jobId: input.job_id,
+      status: finalState.status,
       elapsedMs,
     });
 
-    const response: JobStatusResponse = {
-      status: jobState.status,
-      job_id: input.job_id,
-      started_at: jobState.startedAt.toISOString(),
-      elapsed_ms: elapsedMs,
-    };
-
-    // Include result/error if job is complete or failed
-    if (jobState.status === "completed" && jobState.result) {
-      response.result = jobState.result;
-    } else if (jobState.status === "failed" && jobState.error) {
-      response.error = jobState.error;
-    }
-
-    return response;
+    return buildJobStatusResponse(finalState, elapsedMs);
   } catch (error) {
-    const mcpError = formatMcpError(
-      error,
-      input.job_id ? { jobId: input.job_id } : undefined
-    );
+    const mcpError = formatMcpError(error, input.job_id ? { jobId: input.job_id } : undefined);
 
     logger.error("[get-job-status] Error getting job status", error);
     throw mcpError;
   }
 }
+
+function buildJobStatusResponse(jobState: JobStateLike, elapsedMs: number): JobStatusResponse {
+  const response: JobStatusResponse = {
+    status: jobState.status,
+    job_id: jobState.id,
+    started_at: jobState.startedAt.toISOString(),
+    elapsed_ms: elapsedMs,
+  };
+
+  if (jobState.status === "completed" && jobState.result !== undefined) {
+    response.result = jobState.result;
+  } else if (jobState.status === "failed" && jobState.error) {
+    response.error = jobState.error;
+  }
+
+  return response;
+}
+
+function calculateElapsedMs(jobState: JobStateLike): number {
+  const startMs = jobState.startedAtMs ?? jobState.startedAt.getTime();
+  // If the job has a recorded completion time, use it to avoid shrinking/low values on late polls.
+  const endMs = jobState.completedAt ? jobState.completedAt.getTime() : Date.now();
+  return Math.max(0, endMs - startMs);
+}
+
+// Minimal shape to avoid importing the concrete JobState type
+type JobStateLike = Pick<
+  JobState,
+  "id" | "status" | "startedAt" | "startedAtMs" | "completedAt" | "result" | "error"
+>;

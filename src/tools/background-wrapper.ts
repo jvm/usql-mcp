@@ -4,6 +4,7 @@
  * and continues execution in the background
  */
 
+import { createHash } from "crypto";
 import { createLogger } from "../utils/logger.js";
 import { getJobManager } from "../usql/job-manager.js";
 import { getBackgroundThresholdMs } from "../usql/config.js";
@@ -35,7 +36,8 @@ export function withBackgroundSupport<T, R>(
       typeof (input as Record<string, unknown>).connection_string === "string"
     ) {
       const connStr = (input as Record<string, unknown>).connection_string as string;
-      connectionHash = Buffer.from(connStr).toString("base64").substring(0, 16);
+      // Use SHA256 hash instead of base64 substring for better uniqueness
+      connectionHash = createHash("sha256").update(connStr).digest("hex").substring(0, 16);
     }
 
     // Create a promise that resolves after the threshold
@@ -64,7 +66,7 @@ export function withBackgroundSupport<T, R>(
       return result as R;
     }
 
-    // Tool is still running after threshold, return job ID
+    // Tool is still running after threshold, create job and return job ID
     const jobId = jobManager.createJob(toolName, connectionHash);
     const startedAt = new Date().toISOString();
 
@@ -78,7 +80,7 @@ export function withBackgroundSupport<T, R>(
       threshold,
     });
 
-    // Continue execution in background
+    // Continue execution in background (promise already started, continues to completion)
     handlerPromise
       .then((res) => {
         jobManager.completeJob(jobId, res);
@@ -106,3 +108,4 @@ export function withBackgroundSupport<T, R>(
     };
   };
 }
+/* global AbortController */

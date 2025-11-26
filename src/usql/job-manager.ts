@@ -2,7 +2,7 @@
  * In-memory job manager for tracking background query executions
  */
 
-import { randomUUID } from "crypto";
+import { randomBytes } from "crypto";
 import { createLogger } from "../utils/logger.js";
 import { McpError } from "../types/index.js";
 
@@ -12,6 +12,7 @@ export interface JobState {
   id: string;
   status: "running" | "completed" | "failed" | "cancelled";
   startedAt: Date;
+  startedAtMs: number;
   completedAt?: Date;
   result?: unknown;
   error?: McpError;
@@ -24,15 +25,20 @@ class JobManager {
   private resultTTL: number; // milliseconds
   private cleanupInterval: NodeJS.Timeout;
   private jobCancellers = new Map<string, AbortController>(); // Track cancellation controllers
+  // Track waiters that should be notified when a job leaves "running" state
+  private waiters = new Map<string, Array<(job: JobState) => void>>();
 
   constructor(resultTTL: number = 3600000) {
     this.resultTTL = resultTTL;
     logger.debug("[job-manager] Initializing with TTL", { resultTTL });
 
     // Start cleanup interval - run every 5 minutes
-    this.cleanupInterval = setInterval(() => {
-      this.cleanup();
-    }, 5 * 60 * 1000);
+    this.cleanupInterval = setInterval(
+      () => {
+        this.cleanup();
+      },
+      5 * 60 * 1000
+    );
 
     // Don't keep the process alive due to this interval
     this.cleanupInterval.unref();
@@ -41,12 +47,14 @@ class JobManager {
   /**
    * Create a new job and return its ID
    */
-  createJob(toolName: string, connectionStringHash?: string): string {
-    const jobId = randomUUID();
+  createJob(toolName: string, connectionStringHash?: string, startedAtMs?: number): string {
+    const jobId = generateJobId();
+    const startMs = startedAtMs ?? Date.now();
     const jobState: JobState = {
       id: jobId,
       status: "running",
-      startedAt: new Date(),
+      startedAt: new Date(startMs),
+      startedAtMs: startMs,
       toolName,
       connectionStringHash,
     };
@@ -76,8 +84,10 @@ class JobManager {
 
     logger.debug("[job-manager] Job completed", {
       jobId,
-      elapsedMs: job.completedAt.getTime() - job.startedAt.getTime(),
+      elapsedMs: job.completedAt.getTime() - job.startedAtMs,
     });
+
+    this.notifyWaiters(jobId, job);
   }
 
   /**
@@ -96,9 +106,11 @@ class JobManager {
 
     logger.debug("[job-manager] Job failed", {
       jobId,
-      elapsedMs: job.completedAt.getTime() - job.startedAt.getTime(),
+      elapsedMs: job.completedAt.getTime() - job.startedAtMs,
       errorType: error.error,
     });
+
+    this.notifyWaiters(jobId, job);
   }
 
   /**
@@ -140,8 +152,10 @@ class JobManager {
 
     logger.debug("[job-manager] Job cancelled", {
       jobId,
-      elapsedMs: job.completedAt.getTime() - job.startedAt.getTime(),
+      elapsedMs: job.completedAt.getTime() - job.startedAtMs,
     });
+
+    this.notifyWaiters(jobId, job);
 
     return { success: true, message: `Job ${jobId} cancelled successfully` };
   }
@@ -168,6 +182,7 @@ class JobManager {
    * Delete a specific job (for cleanup)
    */
   deleteJob(jobId: string): boolean {
+    this.waiters.delete(jobId);
     return this.jobs.delete(jobId);
   }
 
@@ -185,6 +200,7 @@ class JobManager {
         if (age > this.resultTTL) {
           this.jobs.delete(jobId);
           this.jobCancellers.delete(jobId); // Also clean up the canceller
+          this.waiters.delete(jobId);
           deletedCount++;
         }
       }
@@ -206,6 +222,7 @@ class JobManager {
     const count = this.jobs.size;
     this.jobs.clear();
     this.jobCancellers.clear();
+    this.waiters.clear();
     logger.debug("[job-manager] Force cleanup completed", { deletedCount: count });
   }
 
@@ -217,6 +234,56 @@ class JobManager {
       .filter((job) => job.status === "running")
       .map((job) => ({ ...job }));
   }
+
+  /**
+   * Wait for a job to complete/fail/cancel or until timeoutMs elapses.
+   * Resolves with the latest JobState or null if timeout.
+   */
+  async waitForCompletion(jobId: string, timeoutMs: number): Promise<JobState | null> {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      return null;
+    }
+
+    // If already not running, return immediately
+    if (job.status !== "running") {
+      return { ...job };
+    }
+
+    // Set up a promise that resolves when the job is notified or times out
+    return await new Promise<JobState | null>((resolve) => {
+      const timeout = setTimeout(() => {
+        // On timeout just resolve with current state (still running) if present
+        const current = this.jobs.get(jobId);
+        this.waiters.delete(jobId);
+        resolve(current ? { ...current } : null);
+      }, timeoutMs);
+
+      const waiter = (updatedJob: JobState): void => {
+        clearTimeout(timeout);
+        resolve({ ...updatedJob });
+      };
+
+      const existing = this.waiters.get(jobId) ?? [];
+      existing.push(waiter);
+      this.waiters.set(jobId, existing);
+    });
+  }
+
+  /**
+   * Notify and clear waiters for a job
+   */
+  private notifyWaiters(jobId: string, job: JobState): void {
+    const waiters = this.waiters.get(jobId);
+    if (waiters && waiters.length > 0) {
+      waiters.forEach((fn) => fn({ ...job }));
+      this.waiters.delete(jobId);
+    }
+  }
+}
+
+function generateJobId(): string {
+  return randomBytes(8).toString("base64url");
 }
 
 // Singleton instance
@@ -243,3 +310,4 @@ export function shutdownJobManager(): void {
     manager = null;
   }
 }
+/* global AbortController */
