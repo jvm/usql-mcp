@@ -9,7 +9,8 @@ import { createLogger } from "../utils/logger.js";
 import { getJobManager } from "../usql/job-manager.js";
 import { getBackgroundThresholdMs } from "../usql/config.js";
 import { BackgroundJobResponse } from "../types/index.js";
-import { formatMcpError } from "../utils/error-handler.js";
+import { formatMcpError, sanitizeConnectionString } from "../utils/error-handler.js";
+import { createProgressReporter } from "../notifications/progress-notifier.js";
 
 const logger = createLogger("usql-mcp:background-wrapper");
 
@@ -19,11 +20,12 @@ const logger = createLogger("usql-mcp:background-wrapper");
  */
 export function withBackgroundSupport<T, R>(
   toolName: string,
-  handler: (input: T) => Promise<R>
+  handler: (input: T, signal?: AbortSignal) => Promise<R>
 ): (input: T) => Promise<R | BackgroundJobResponse> {
   return async (input: T): Promise<R | BackgroundJobResponse> => {
     const threshold = getBackgroundThresholdMs();
     const jobManager = getJobManager();
+    const abortController = new AbortController();
 
     let result: R | undefined;
 
@@ -36,19 +38,24 @@ export function withBackgroundSupport<T, R>(
       typeof (input as Record<string, unknown>).connection_string === "string"
     ) {
       const connStr = (input as Record<string, unknown>).connection_string as string;
-      // Use SHA256 hash instead of base64 substring for better uniqueness
-      connectionHash = createHash("sha256").update(connStr).digest("hex").substring(0, 16);
+      // Sanitize connection string first to remove credentials, then hash
+      const sanitized = sanitizeConnectionString(connStr);
+      connectionHash = createHash("sha256").update(sanitized).digest("hex");
     }
 
     // Create a promise that resolves after the threshold
+    let thresholdHandle: NodeJS.Timeout | null = null;
     const thresholdPromise = new Promise<void>((resolve) => {
-      setTimeout(resolve, threshold);
+      thresholdHandle = setTimeout(resolve, threshold);
     });
 
     // Race between handler and threshold
-    const handlerPromise = handler(input);
+    const handlerPromise = handler(input, abortController.signal);
     const raceResult = await Promise.race([
       handlerPromise.then((res) => {
+        if (thresholdHandle) {
+          clearTimeout(thresholdHandle);
+        }
         result = res;
         return { completed: true };
       }),
@@ -71,18 +78,29 @@ export function withBackgroundSupport<T, R>(
     const startedAt = new Date().toISOString();
 
     // Create an AbortController for this job (for future cancellation support)
-    const abortController = new AbortController();
     jobManager.setJobCanceller(jobId, abortController);
+
+    // Create progress reporter for this job
+    // Estimate remaining time as 2x the threshold (conservative estimate)
+    const estimatedDurationMs = threshold * 2;
+    const progressReporter = createProgressReporter(estimatedDurationMs, (progress) => {
+      jobManager.updateProgress(jobId, progress);
+    });
+
+    // Start progress reporting
+    progressReporter.start();
 
     logger.debug("[background-wrapper] Tool exceeded threshold, returning job ID", {
       toolName,
       jobId,
       threshold,
+      estimatedDurationMs,
     });
 
     // Continue execution in background (promise already started, continues to completion)
     handlerPromise
       .then((res) => {
+        progressReporter.reportCompletion();
         jobManager.completeJob(jobId, res);
         logger.debug("[background-wrapper] Background job completed", {
           jobId,
@@ -90,6 +108,7 @@ export function withBackgroundSupport<T, R>(
         });
       })
       .catch((err) => {
+        progressReporter.stop();
         const mcpError = formatMcpError(err);
         jobManager.failJob(jobId, mcpError);
         logger.error("[background-wrapper] Background job failed", {

@@ -29,6 +29,7 @@ export async function executeUsqlCommand(
   const timeout = options?.timeout;
   const format = options?.format || "json";
   const signal = options?.signal;
+  let abortHandler: (() => void) | undefined;
 
   logger.debug("[process-executor] Executing usql command", {
     connectionString: formatConnectionStringForLogging(connectionString),
@@ -49,6 +50,9 @@ export async function executeUsqlCommand(
     if (typeof timeout === "number" && timeout > 0) {
       timeoutHandle = setTimeout(() => {
         timedOut = true;
+        if (signal && abortHandler) {
+          signal.removeEventListener("abort", abortHandler as () => void);
+        }
         if (childProcess?.pid) {
           logger.debug("[process-executor] Query timeout, killing process", {
             pid: childProcess.pid,
@@ -80,7 +84,7 @@ export async function executeUsqlCommand(
         return;
       }
 
-      const abortHandler = (): void => {
+      abortHandler = () => {
         aborted = true;
         logger.debug("[process-executor] Abort signal received, killing process", {
           pid: childProcess?.pid,
@@ -96,12 +100,15 @@ export async function executeUsqlCommand(
             logger.warn("[process-executor] Failed to kill process on abort", { error: e });
           }
         }
+        if (timeoutHandle) {
+          clearTimeout(timeoutHandle);
+        }
         reject(new Error("Operation aborted by client"));
       };
 
       signal.addEventListener("abort", abortHandler);
       const removeAbortHandler = (): void => {
-        signal.removeEventListener("abort", abortHandler);
+        signal.removeEventListener("abort", abortHandler as () => void);
       };
       // Attach cleanup listeners once we have a process instance
       const attachCleanup = (proc: ChildProcess): void => {
@@ -155,6 +162,9 @@ export async function executeUsqlCommand(
     });
 
     childProcess.on("error", (error) => {
+      if (signal && abortHandler) {
+        signal.removeEventListener("abort", abortHandler as () => void);
+      }
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
       }
@@ -165,6 +175,9 @@ export async function executeUsqlCommand(
     });
 
     childProcess.on("close", (exitCode) => {
+      if (signal && abortHandler) {
+        signal.removeEventListener("abort", abortHandler as () => void);
+      }
       if (timeoutHandle) {
         clearTimeout(timeoutHandle);
       }
@@ -199,6 +212,7 @@ export async function executeUsqlQuery(
   return executeUsqlCommand(connectionString, query, {
     timeout: options?.timeout,
     format: options?.format || "json",
+    signal: options?.signal,
   });
 }
 /* global AbortSignal */

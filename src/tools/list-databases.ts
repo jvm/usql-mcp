@@ -3,15 +3,27 @@
  */
 
 import { Tool } from "@modelcontextprotocol/sdk/types.js";
-import { createToolHandler } from "./tool-handler-factory.js";
-import { withBackgroundSupport } from "./background-wrapper.js";
+import { ListDatabasesInput, RawOutput } from "../types/index.js";
+import { createLogger } from "../utils/logger.js";
+import { createUsqlError, formatMcpError } from "../utils/error-handler.js";
+import { validateConnectionString } from "../usql/connection.js";
+import { executeUsqlQuery } from "../usql/process-executor.js";
+import { parseUsqlError } from "../usql/parser.js";
+import { getQueryTimeout, resolveConnectionStringOrDefault } from "../usql/config.js";
 import { detectDatabaseType, getListDatabasesCommand } from "../utils/database-mapper.js";
-import { resolveConnectionStringOrDefault } from "../usql/config.js";
+import { withBackgroundSupport } from "./background-wrapper.js";
+import { listDatabasesOutputSchema, backgroundJobOutputSchema } from "./output-schemas.js";
+
+const logger = createLogger("usql-mcp:tools:list-databases");
 
 export const listDatabasesSchema: Tool = {
   name: "list_databases",
+  title: "List Databases",
   description:
-    "List all databases available on a database server. Uses default connection if none specified. Automatically detects the database type and uses the appropriate command.",
+    "List all databases available on a database server. " +
+    "Automatically detects the database type (PostgreSQL, MySQL, Oracle, etc.) and uses the appropriate command. " +
+    "Returns database names and metadata. " +
+    "Uses default connection if none specified.",
   inputSchema: {
     type: "object",
     properties: {
@@ -34,19 +46,83 @@ export const listDatabasesSchema: Tool = {
     },
     required: [],
   },
+  outputSchema: {
+    oneOf: [listDatabasesOutputSchema, backgroundJobOutputSchema],
+  } as any,
 };
 
-const _handleListDatabases = createToolHandler({
-  name: "list-databases",
-  getQuery: (input) => {
-    // Determine the database type from the connection string
-    const connectionString = resolveConnectionStringOrDefault(
-      (input as Record<string, unknown>).connection_string as string | undefined
-    );
-    const dbType = detectDatabaseType(connectionString);
-    return getListDatabasesCommand(dbType);
-  },
-  errorType: "ListDatabasesError",
-});
+async function _handleListDatabases(
+  input: ListDatabasesInput,
+  signal?: AbortSignal
+): Promise<RawOutput> {
+  const outputFormat = input.output_format || "json";
+
+  logger.debug("[list-databases] Handling request", {
+    connectionStringInput: input.connection_string,
+    outputFormat,
+  });
+
+  let resolvedConnectionString: string | undefined;
+
+  try {
+    // Resolve connection string (could be a name like "oracle" or a full URI)
+    try {
+      resolvedConnectionString = resolveConnectionStringOrDefault(input.connection_string);
+    } catch (error) {
+      throw createUsqlError("InvalidConnection", `Failed to resolve connection: ${String(error)}`);
+    }
+
+    if (!validateConnectionString(resolvedConnectionString)) {
+      throw createUsqlError(
+        "InvalidConnection",
+        `Invalid connection string format: ${resolvedConnectionString}`
+      );
+    }
+
+    // Build query using database-specific command
+    const dbType = detectDatabaseType(resolvedConnectionString);
+    const query = getListDatabasesCommand(dbType);
+
+    const timeoutOverride =
+      input.timeout_ms === null
+        ? undefined
+        : typeof input.timeout_ms === "number" && Number.isFinite(input.timeout_ms)
+          ? input.timeout_ms
+          : undefined;
+    const timeout = timeoutOverride ?? getQueryTimeout();
+    logger.debug("[list-databases] Executing list command", { timeout, outputFormat });
+
+    const result = await executeUsqlQuery(resolvedConnectionString, query, {
+      timeout,
+      format: outputFormat,
+      signal,
+    });
+
+    logger.debug("[list-databases] Command executed", {
+      exitCode: result.exitCode,
+      stdoutLength: result.stdout.length,
+      stderrLength: result.stderr.length,
+    });
+
+    // Check for errors
+    if (result.exitCode !== 0 && result.stderr) {
+      const errorMessage = parseUsqlError(result.stderr);
+      throw createUsqlError("ListDatabasesError", errorMessage, { exitCode: result.exitCode });
+    }
+
+    logger.debug("[list-databases] Databases retrieved", { outputFormat });
+
+    return {
+      format: outputFormat as "json" | "csv",
+      content: result.stdout,
+    };
+  } catch (error) {
+    const connectionForError = resolvedConnectionString ?? input.connection_string;
+    const mcpError = formatMcpError(error, connectionForError ? { connectionString: connectionForError } : undefined);
+
+    logger.error("[list-databases] Error listing databases", error);
+    throw mcpError;
+  }
+}
 
 export const handleListDatabases = withBackgroundSupport("list_databases", _handleListDatabases);

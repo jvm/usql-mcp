@@ -28,6 +28,9 @@ describe("Tool Handlers", () => {
   const mockGetQueryTimeout = config.getQueryTimeout as jest.MockedFunction<
     typeof config.getQueryTimeout
   >;
+  const mockGetSafetyConfig = config.getSafetyConfig as jest.MockedFunction<
+    typeof config.getSafetyConfig
+  >;
   const mockValidateConnectionString = connection.validateConnectionString as jest.MockedFunction<
     typeof connection.validateConnectionString
   >;
@@ -36,6 +39,12 @@ describe("Tool Handlers", () => {
     jest.clearAllMocks();
     mockResolveConnectionStringOrDefault.mockReturnValue("postgres://localhost/testdb");
     mockGetQueryTimeout.mockReturnValue(undefined);
+    mockGetSafetyConfig.mockReturnValue({
+      allowDestructiveOperations: true,
+      blockHighRiskQueries: false,
+      blockCriticalRiskQueries: false,
+      requireWhereClauseForDelete: false,
+    });
     mockValidateConnectionString.mockReturnValue(true);
   });
 
@@ -62,10 +71,12 @@ describe("Tool Handlers", () => {
       const rawResult = unwrapRaw(result);
       expect(rawResult.format).toBe("json");
       expect(rawResult.content).toBe('{"rows": [{"id": 1}]}');
+      expect(rawResult.safety_analysis).toBeDefined();
+      expect(rawResult.safety_analysis?.risk_level).toBe("low");
       expect(mockExecuteUsqlQuery).toHaveBeenCalledWith(
         "postgres://localhost/testdb",
         "SELECT * FROM users",
-        { timeout: undefined, format: "json" }
+        expect.objectContaining({ timeout: undefined, format: "json" })
       );
     });
 
@@ -212,6 +223,17 @@ describe("Tool Handlers", () => {
         }),
       });
     });
+
+    it("rejects when parameters are provided (not yet supported)", async () => {
+      await expect(
+        handleExecuteQuery({
+          query: "SELECT * FROM users WHERE id = $1",
+          parameters: [1],
+        })
+      ).rejects.toMatchObject({
+        error: "NotImplemented",
+      });
+    });
   });
 
   describe("handleListDatabases", () => {
@@ -346,6 +368,14 @@ describe("Tool Handlers", () => {
         }),
       });
     });
+
+    it("rejects database switching via database parameter", async () => {
+      await expect(
+        handleListTables({ database: "otherdb" })
+      ).rejects.toMatchObject({
+        error: "DatabaseSwitchNotSupported",
+      });
+    });
   });
 
   describe("handleDescribeTable", () => {
@@ -432,6 +462,14 @@ describe("Tool Handlers", () => {
           }),
         }
       );
+    });
+
+    it("rejects database switching via database parameter", async () => {
+      await expect(
+        handleDescribeTable({ table: "users", database: "otherdb" })
+      ).rejects.toMatchObject({
+        error: "DatabaseSwitchNotSupported",
+      });
     });
 
     it("respects output_format parameter", async () => {

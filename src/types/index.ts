@@ -5,6 +5,13 @@
 export interface RawOutput {
   format: "json" | "csv";
   content: string;
+  safety_analysis?: {
+    risk_level: "low" | "medium" | "high" | "critical";
+    warnings: string[];
+    dangerous_operations: string[];
+    complexity_score: number;
+    recommendations: string[];
+  };
 }
 
 export interface ExecuteQueryInput {
@@ -46,6 +53,7 @@ export interface ExecuteScriptInput {
 export interface UsqlExecutorOptions {
   timeout?: number;
   format?: "json" | "table" | "csv";
+  signal?: AbortSignal;
 }
 
 export interface UsqlConfig {
@@ -56,6 +64,14 @@ export interface UsqlConfig {
     defaultConnection?: string;
     backgroundThresholdMs?: number;
     jobResultTtlMs?: number;
+    allowDestructiveOperations?: boolean;
+    blockHighRiskQueries?: boolean;
+    blockCriticalRiskQueries?: boolean;
+    requireWhereClauseForDelete?: boolean;
+    maxResultBytes?: number;
+    rateLimitRpm?: number;
+    maxConcurrentRequests?: number;
+    schemaCacheTtl?: number;
   };
 }
 
@@ -75,6 +91,7 @@ export interface JobStatusResponse {
   job_id: string;
   started_at: string;
   elapsed_ms: number;
+  progress?: number; // Progress percentage (0-100) for running jobs
   result?: unknown;
   error?: McpError;
 }

@@ -6,6 +6,7 @@ import { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { createLogger } from "../utils/logger.js";
 import { createUsqlError, formatMcpError } from "../utils/error-handler.js";
 import { getJobManager } from "../usql/job-manager.js";
+import { cancelJobOutputSchema } from "./output-schemas.js";
 
 const logger = createLogger("usql-mcp:tools:cancel-job");
 
@@ -22,8 +23,12 @@ interface CancelJobResponse {
 
 export const cancelJobSchema: Tool = {
   name: "cancel_job",
+  title: "Cancel Background Job",
   description:
-    "Cancel a running background job and stop its underlying query execution. The query will be terminated gracefully.",
+    "Cancel a running background job and stop its underlying query execution. " +
+    "The query will be terminated gracefully by killing the underlying usql process. " +
+    "Use this when a long-running query needs to be stopped before completion. " +
+    "Returns the cancellation status (cancelled, not_found, or not_running).",
   inputSchema: {
     type: "object",
     properties: {
@@ -38,6 +43,7 @@ export const cancelJobSchema: Tool = {
     },
     required: ["job_id"],
   },
+  outputSchema: cancelJobOutputSchema as any,
 };
 
 export async function handleCancelJob(input: CancelJobInput): Promise<CancelJobResponse> {

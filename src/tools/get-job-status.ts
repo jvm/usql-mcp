@@ -7,6 +7,7 @@ import { createLogger } from "../utils/logger.js";
 import { createUsqlError, formatMcpError } from "../utils/error-handler.js";
 import { getJobManager, JobState } from "../usql/job-manager.js";
 import { JobStatusResponse } from "../types/index.js";
+import { getJobStatusOutputSchema } from "./output-schemas.js";
 
 const logger = createLogger("usql-mcp:tools:get-job-status");
 
@@ -17,8 +18,12 @@ interface GetJobStatusInput {
 
 export const getJobStatusSchema: Tool = {
   name: "get_job_status",
+  title: "Get Background Job Status",
   description:
-    "Check the status of a background job and retrieve results when available. This tool will wait for the specified duration before checking, preventing inefficient tight polling loops.",
+    "Check the status of a background job and retrieve results when available. " +
+    "Returns immediately with current status, or waits up to wait_seconds for completion. " +
+    "Use this to poll long-running queries that returned a job_id. " +
+    "The wait prevents inefficient tight polling loops - recommended values are 5-30 seconds.",
   inputSchema: {
     type: "object",
     properties: {
@@ -37,6 +42,7 @@ export const getJobStatusSchema: Tool = {
     },
     required: ["job_id", "wait_seconds"],
   },
+  outputSchema: getJobStatusOutputSchema as any,
 };
 
 export async function handleGetJobStatus(input: GetJobStatusInput): Promise<JobStatusResponse> {
@@ -123,6 +129,11 @@ function buildJobStatusResponse(jobState: JobStateLike, elapsedMs: number): JobS
     elapsed_ms: elapsedMs,
   };
 
+  // Include progress for running jobs
+  if (jobState.status === "running" && jobState.progress !== undefined) {
+    response.progress = jobState.progress;
+  }
+
   if (jobState.status === "completed" && jobState.result !== undefined) {
     response.result = jobState.result;
   } else if (jobState.status === "failed" && jobState.error) {
@@ -142,5 +153,5 @@ function calculateElapsedMs(jobState: JobStateLike): number {
 // Minimal shape to avoid importing the concrete JobState type
 type JobStateLike = Pick<
   JobState,
-  "id" | "status" | "startedAt" | "startedAtMs" | "completedAt" | "result" | "error"
+  "id" | "status" | "startedAt" | "startedAtMs" | "completedAt" | "result" | "error" | "progress"
 >;

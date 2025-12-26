@@ -224,6 +224,43 @@ export function getJobResultTtlMs(): number {
   return config.defaults?.jobResultTtlMs ?? 3600000;
 }
 
+export function getSafetyConfig(): {
+  allowDestructiveOperations: boolean;
+  blockHighRiskQueries: boolean;
+  blockCriticalRiskQueries: boolean;
+  requireWhereClauseForDelete: boolean;
+} {
+  const config = loadConfig();
+  return {
+    allowDestructiveOperations: config.defaults?.allowDestructiveOperations ?? true,
+    blockHighRiskQueries: config.defaults?.blockHighRiskQueries ?? false,
+    blockCriticalRiskQueries: config.defaults?.blockCriticalRiskQueries ?? false,
+    requireWhereClauseForDelete: config.defaults?.requireWhereClauseForDelete ?? false,
+  };
+}
+
+export function getMaxResultBytes(): number {
+  const config = loadConfig();
+  return config.defaults?.maxResultBytes ?? 10485760; // 10MB default
+}
+
+export function getRateLimitRpm(): number | null {
+  const config = loadConfig();
+  const rpm = config.defaults?.rateLimitRpm;
+  return rpm !== undefined ? rpm : null; // null means no rate limiting
+}
+
+export function getMaxConcurrentRequests(): number {
+  const config = loadConfig();
+  return config.defaults?.maxConcurrentRequests ?? 10;
+}
+
+export function getSchemaCacheTtl(): number | null {
+  const config = loadConfig();
+  const ttl = config.defaults?.schemaCacheTtl;
+  return ttl !== undefined ? ttl : null; // null means no caching
+}
+
 export function resolveConnectionStringOrDefault(nameOrUri?: string): string {
   if (nameOrUri && typeof nameOrUri === "string" && nameOrUri.trim().length > 0) {
     return resolveConnectionString(nameOrUri);

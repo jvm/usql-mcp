@@ -13,15 +13,23 @@ import {
 import { validateConnectionString } from "../usql/connection.js";
 import { executeUsqlQuery } from "../usql/process-executor.js";
 import { parseUsqlError } from "../usql/parser.js";
-import { getQueryTimeout, resolveConnectionStringOrDefault } from "../usql/config.js";
+import { getQueryTimeout, resolveConnectionStringOrDefault, getSafetyConfig } from "../usql/config.js";
 import { withBackgroundSupport } from "./background-wrapper.js";
+import { executeQueryOutputSchema, backgroundJobOutputSchema } from "./output-schemas.js";
+import { analyzeQuerySafety, shouldBlockQuery } from "../utils/query-safety-analyzer.js";
 
 const logger = createLogger("usql-mcp:tools:execute-query");
 
 export const executeQuerySchema: Tool = {
   name: "execute_query",
+  title: "Execute SQL Query",
   description:
-    "Execute a SQL query against a database and return results. Uses default connection if none specified.",
+    "Execute a SQL query against a database and return results. " +
+    "Use this for SELECT, INSERT, UPDATE, DELETE, and other single-statement queries. " +
+    "For multi-statement SQL scripts, use execute_script instead. " +
+    "Supports JSON and CSV output formats. " +
+    "Uses default connection if none specified. " +
+    "Long-running queries (>30s by default) will return a job_id and continue in the background.",
   inputSchema: {
     type: "object",
     properties: {
@@ -55,9 +63,15 @@ export const executeQuerySchema: Tool = {
     },
     required: ["query"],
   },
+  outputSchema: {
+    oneOf: [executeQueryOutputSchema, backgroundJobOutputSchema],
+  } as any,
 };
 
-async function _handleExecuteQuery(input: ExecuteQueryInput): Promise<RawOutput> {
+async function _handleExecuteQuery(
+  input: ExecuteQueryInput,
+  signal?: AbortSignal
+): Promise<RawOutput> {
   const outputFormat = input.output_format || "json";
 
   logger.debug("[execute-query] Handling request", {
@@ -102,7 +116,43 @@ async function _handleExecuteQuery(input: ExecuteQueryInput): Promise<RawOutput>
       );
     }
 
-    const processedQuery = input.query;
+    // Analyze query safety
+    const safetyAnalysis = analyzeQuerySafety(input.query);
+    const safetyConfig = getSafetyConfig();
+
+    logger.debug("[execute-query] Safety analysis complete", {
+      riskLevel: safetyAnalysis.riskLevel,
+      warningCount: safetyAnalysis.warnings.length,
+      dangerousOpsCount: safetyAnalysis.dangerousOperations.length,
+    });
+
+    // Check if query should be blocked
+    if (shouldBlockQuery(safetyAnalysis, safetyConfig)) {
+      const blockReasons = [];
+      if (safetyConfig.blockCriticalRiskQueries && safetyAnalysis.riskLevel === "critical") {
+        blockReasons.push("Query has critical risk level");
+      }
+      if (safetyConfig.blockHighRiskQueries && safetyAnalysis.riskLevel === "high") {
+        blockReasons.push("Query has high risk level");
+      }
+      if (
+        safetyConfig.requireWhereClauseForDelete &&
+        (safetyAnalysis.details.hasDeleteWithoutWhere || safetyAnalysis.details.hasUpdateWithoutWhere)
+      ) {
+        blockReasons.push("DELETE/UPDATE without WHERE clause is not allowed");
+      }
+      if (
+        !safetyConfig.allowDestructiveOperations &&
+        (safetyAnalysis.details.hasDropStatement || safetyAnalysis.details.hasTruncateStatement)
+      ) {
+        blockReasons.push("Destructive operations (DROP/TRUNCATE) are not allowed");
+      }
+
+      throw createUsqlError("QueryBlocked", `Query blocked by safety policy: ${blockReasons.join("; ")}`, {
+        safetyAnalysis,
+        blockReasons,
+      });
+    }
 
     // Execute query
     const timeoutOverride =
@@ -114,9 +164,10 @@ async function _handleExecuteQuery(input: ExecuteQueryInput): Promise<RawOutput>
     const timeout = timeoutOverride ?? getQueryTimeout();
     logger.debug("[execute-query] Executing query with timeout", { timeout });
 
-    const result = await executeUsqlQuery(resolvedConnectionString, processedQuery, {
+    const result = await executeUsqlQuery(resolvedConnectionString, input.query, {
       timeout,
       format: outputFormat,
+      signal,
     });
 
     logger.debug("[execute-query] Query executed", {
@@ -134,7 +185,7 @@ async function _handleExecuteQuery(input: ExecuteQueryInput): Promise<RawOutput>
       });
     }
 
-    // Return raw output
+    // Return raw output with safety analysis
     logger.debug("[execute-query] Query successful", {
       outputFormat,
       contentLength: result.stdout.length,
@@ -143,6 +194,13 @@ async function _handleExecuteQuery(input: ExecuteQueryInput): Promise<RawOutput>
     return {
       format: outputFormat as "json" | "csv",
       content: result.stdout,
+      safety_analysis: {
+        risk_level: safetyAnalysis.riskLevel,
+        warnings: safetyAnalysis.warnings,
+        dangerous_operations: safetyAnalysis.dangerousOperations,
+        complexity_score: safetyAnalysis.complexityScore,
+        recommendations: safetyAnalysis.recommendations,
+      },
     };
   } catch (error) {
     // Use user-provided connection string for error details (before resolution)

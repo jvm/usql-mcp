@@ -18,6 +18,8 @@ export interface JobState {
   error?: McpError;
   toolName: string;
   connectionStringHash?: string; // Hashed for security, not full string
+  progress?: number; // Progress percentage (0-100)
+  progressToken?: string; // MCP progress token for notifications
 }
 
 class JobManager {
@@ -66,6 +68,42 @@ class JobManager {
     });
 
     return jobId;
+  }
+
+  /**
+   * Update job progress percentage (0-100)
+   */
+  updateProgress(jobId: string, progress: number): void {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      logger.warn("[job-manager] Attempted to update progress for non-existent job", { jobId });
+      return;
+    }
+
+    if (job.status !== "running") {
+      logger.debug("[job-manager] Skipping progress update for non-running job", {
+        jobId,
+        status: job.status,
+      });
+      return;
+    }
+
+    job.progress = Math.min(100, Math.max(0, progress));
+    logger.debug("[job-manager] Updated job progress", { jobId, progress: job.progress });
+  }
+
+  /**
+   * Set the MCP progress token for a job
+   */
+  setProgressToken(jobId: string, progressToken: string | undefined): void {
+    const job = this.jobs.get(jobId);
+    if (!job) {
+      logger.warn("[job-manager] Attempted to set progress token for non-existent job", { jobId });
+      return;
+    }
+
+    job.progressToken = progressToken;
+    logger.debug("[job-manager] Set progress token for job", { jobId, hasToken: !!progressToken });
   }
 
   /**

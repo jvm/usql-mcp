@@ -12,13 +12,18 @@ import { parseUsqlError } from "../usql/parser.js";
 import { getQueryTimeout, resolveConnectionStringOrDefault } from "../usql/config.js";
 import { detectDatabaseType, getDescribeTableCommand } from "../utils/database-mapper.js";
 import { withBackgroundSupport } from "./background-wrapper.js";
+import { describeTableOutputSchema, backgroundJobOutputSchema } from "./output-schemas.js";
 
 const logger = createLogger("usql-mcp:tools:describe-table");
 
 export const describeTableSchema: Tool = {
   name: "describe_table",
+  title: "Describe Table Schema",
   description:
-    "Get detailed schema information for a specific table (columns, types, constraints). Uses default connection if none specified.",
+    "Get detailed schema information for a specific table including columns, data types, constraints, indexes, and keys. " +
+    "Automatically detects the database type and uses the appropriate describe command. " +
+    "Returns comprehensive metadata for query planning and schema understanding. " +
+    "Uses default connection if none specified.",
   inputSchema: {
     type: "object",
     properties: {
@@ -49,9 +54,15 @@ export const describeTableSchema: Tool = {
     },
     required: ["table"],
   },
+  outputSchema: {
+    oneOf: [describeTableOutputSchema, backgroundJobOutputSchema],
+  } as any,
 };
 
-async function _handleDescribeTable(input: DescribeTableInput): Promise<RawOutput> {
+async function _handleDescribeTable(
+  input: DescribeTableInput,
+  signal?: AbortSignal
+): Promise<RawOutput> {
   const outputFormat = input.output_format || "json";
 
   logger.debug("[describe-table] Handling request", {
@@ -82,6 +93,14 @@ async function _handleDescribeTable(input: DescribeTableInput): Promise<RawOutpu
       );
     }
 
+    // Reject database parameter switching
+    if (input.database) {
+      throw createUsqlError(
+        "DatabaseSwitchNotSupported",
+        "Selecting a different database via the database parameter is not supported. Please include the database in the connection string instead."
+      );
+    }
+
     // Build describe query - Use database-specific command
     const dbType = detectDatabaseType(resolvedConnectionString);
     const query = getDescribeTableCommand(dbType, input.table);
@@ -102,6 +121,7 @@ async function _handleDescribeTable(input: DescribeTableInput): Promise<RawOutpu
     const result = await executeUsqlQuery(resolvedConnectionString, query, {
       timeout,
       format: outputFormat,
+      signal,
     });
 
     logger.debug("[describe-table] Command executed", {

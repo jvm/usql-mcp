@@ -121,6 +121,19 @@ describe("Process Executor", () => {
       await expect(promise).rejects.toThrow("ENOENT: command not found");
     });
 
+    it("aborts when abort signal is triggered", async () => {
+      const controller = new AbortController();
+
+      const promise = executeUsqlCommand("postgres://localhost/db", "SELECT 1", {
+        signal: controller.signal,
+      });
+
+      controller.abort();
+
+      await expect(promise).rejects.toThrow("Operation aborted by client");
+      expect(mockProcessKill).toHaveBeenCalledWith(-12345);
+    });
+
     it("does not reject twice on timeout followed by error", async () => {
       const promise = executeUsqlCommand("postgres://localhost/db", "SELECT 1", { timeout: 50 });
 
